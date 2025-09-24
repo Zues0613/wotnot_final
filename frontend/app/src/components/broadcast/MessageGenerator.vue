@@ -2,7 +2,7 @@
   <div class="p-4 bg-white rounded-lg shadow-md">
     <h2 class="text-xl font-semibold text-gray-800 mb-4">Message Generator 💬</h2>
     <div class="space-y-4">
-      
+
       <div>
         <label for="prompt" class="block text-sm font-medium text-gray-700">1. Enter your prompt</label>
         <textarea
@@ -29,10 +29,10 @@
           </div>
         </button>
       </div>
-      
+
       <div v-if="generatedMessage" class="mt-4 space-y-4 border-t pt-4">
         <h3 class="text-lg font-semibold text-gray-700">2. Template Details & Actions</h3>
-        
+
         <div>
           <label for="generated-message" class="block text-sm font-medium text-gray-700">Generated Message</label>
           <textarea
@@ -42,7 +42,7 @@
             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
           ></textarea>
         </div>
-        
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
                 <label for="template-name" class="block text-sm font-medium text-gray-700">Template Name</label>
@@ -60,12 +60,33 @@
         </div>
 
         <div>
-            <label for="csv-upload" class="block text-sm font-medium text-gray-700">Upload Contacts (Optional)</label>
-            <input type="file" @change="handleFileUpload" id="csv-upload" accept=".csv" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-            <p class="text-xs text-gray-500 mt-1">CSV must contain 'phone' and 'name' columns.</p>
-            <div v-if="phoneNumbers" class="mt-2 text-sm font-medium text-green-600">
-                ✅ Successfully loaded {{ Object.keys(phoneNumbers).length }} contacts.
+            <h3 class="text-lg font-semibold text-gray-700 mt-4 mb-2">3. Import Contacts</h3>
+            <div class="flex border-b">
+                <button @click="importMethod = 'csv'" :class="importMethod === 'csv' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-2 px-4 border-b-2 font-medium text-sm">
+                    Upload CSV
+                </button>
+                <button @click="importMethod = 'gsheet'" :class="importMethod === 'gsheet' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'" class="whitespace-nowrap py-2 px-4 border-b-2 font-medium text-sm">
+                    Import from Google Sheet
+                </button>
             </div>
+
+            <div v-if="importMethod === 'csv'" class="mt-4">
+                <label for="csv-upload" class="block text-sm font-medium text-gray-700">Upload Contacts from CSV</label>
+                <input type="file" @change="handleFileUpload" id="csv-upload" accept=".csv" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                <p class="text-xs text-gray-500 mt-1">CSV file must contain 'phone' and 'name' columns.</p>
+            </div>
+
+            <div v-if="importMethod === 'gsheet'" class="mt-4">
+                 <label for="gsheet-url" class="block text-sm font-medium text-gray-700">Public Google Sheet URL</label>
+                 <div class="flex space-x-2 mt-1">
+                    <input type="url" v-model="googleSheetUrl" id="gsheet-url" placeholder="Paste your public Google Sheet URL here" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <button @click="handleGoogleSheetImport" :disabled="isActionLoading" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50">Import</button>
+                 </div>
+                 <p class="text-xs text-gray-500 mt-1">Sheet must be public and contain 'phone' and 'name' columns.</p>
+            </div>
+             <div v-if="phoneNumbers" class="mt-2 text-sm font-medium text-green-600">
+                  ✅ Successfully loaded {{ Object.keys(phoneNumbers).length }} contacts.
+             </div>
         </div>
 
         <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
@@ -94,6 +115,7 @@
     </div>
   </div>
 </template>
+
 <script>
 import axios from 'axios';
 import Papa from 'papaparse';
@@ -102,8 +124,6 @@ export default {
   name: 'MessageGenerator',
   data() {
     return {
-      // The base URL for your API. Using the environment variable is best practice.
-      // Make sure VUE_APP_API_URL is set to 'https://api.wotnot.skylog.in' in your .env file
       apiUrl: process.env.VUE_APP_API_URL || 'https://api.wotnot.skylog.in',
       prompt: '',
       generatedMessage: '',
@@ -114,6 +134,10 @@ export default {
       phoneNumbers: null,
       isActionLoading: false,
       actionStatus: null,
+
+      // New properties for contact import method
+      importMethod: 'csv', // 'csv' or 'gsheet'
+      googleSheetUrl: '',
     };
   },
   computed: {
@@ -125,10 +149,6 @@ export default {
     }
   },
   methods: {
-    /**
-     * Retrieves the auth token and builds the authorization header.
-     * Returns the config object or null if the token is not found.
-     */
     getAuthConfig() {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -157,7 +177,7 @@ export default {
       try {
         const response = await axios.post(`${this.apiUrl}/api/generate-message`, {
           prompt: this.prompt,
-        }, config); // Added auth config
+        }, config);
         this.generatedMessage = response.data.message;
         this.$emit('message-generated', this.generatedMessage);
       } catch (error) {
@@ -168,52 +188,110 @@ export default {
       }
     },
     
-    handleFileUpload(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+    /**
+     * Parses CSV data from a string and updates the component's state.
+     * @param {string} csvString - The raw CSV data.
+     */
+    parseCsvData(csvString) {
+        Papa.parse(csvString, {
+            header: true,
+            skipEmptyLines: true,
+            transformHeader: header => header.trim(),
+            complete: (results) => {
+                if (results.errors.length) {
+                    console.error('CSV parsing errors:', results.errors);
+                    this.actionStatus = { message: 'Error parsing data. Please ensure it is a valid CSV format.', isError: true };
+                    return;
+                }
 
-      this.actionStatus = null;
-      this.phoneNumbers = null;
+                const requiredHeaders = ['phone', 'name'];
+                const actualHeaders = results.meta.fields;
+                if (!requiredHeaders.every(header => actualHeaders.includes(header))) {
+                    this.actionStatus = { message: `Data must include '${requiredHeaders.join("' and '")}' columns.`, isError: true };
+                    return;
+                }
 
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        transformHeader: header => header.trim(),
-        complete: (results) => {
-          if (results.errors.length) {
-            console.error('CSV parsing errors:', results.errors);
-            this.actionStatus = { message: 'Error parsing CSV. Please ensure it is a valid CSV file.', isError: true };
-            return;
-          }
-          
-          const requiredHeaders = ['phone', 'name'];
-          const actualHeaders = results.meta.fields; 
-          if (!requiredHeaders.every(header => actualHeaders.includes(header))) {
-            this.actionStatus = { message: `CSV must include '${requiredHeaders.join("' and '")}' columns.`, isError: true };
-            return;
-          }
+                const phoneDict = {};
+                for (const row of results.data) {
+                    const phone = row.phone?.trim();
+                    const name = row.name?.trim();
+                    if (phone && name) {
+                        phoneDict[phone] = name;
+                    }
+                }
 
-          const phoneDict = {};
-          for (const row of results.data) {
-            const phone = row.phone?.trim();
-            const name = row.name?.trim();
-            if (phone && name) {
-              phoneDict[phone] = name;
+                if (Object.keys(phoneDict).length === 0) {
+                    this.actionStatus = { message: 'Data processed, but no valid contacts with both phone and name were found.', isError: true };
+                    return;
+                }
+
+                this.phoneNumbers = phoneDict;
+            },
+            error: (error) => {
+                console.error('Error parsing CSV string:', error);
+                this.actionStatus = { message: 'Failed to read or parse the data.', isError: true };
             }
-          }
-          
-          if (Object.keys(phoneDict).length === 0) {
-              this.actionStatus = { message: 'CSV processed, but no valid contacts with both phone and name were found.', isError: true };
-              return;
-          }
+        });
+    },
 
-          this.phoneNumbers = phoneDict;
-        },
-        error: (error) => {
-          console.error('Error parsing CSV:', error);
-          this.actionStatus = { message: 'Failed to read or parse the CSV file.', isError: true };
+    handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        this.actionStatus = null;
+        this.phoneNumbers = null;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.parseCsvData(e.target.result);
+        };
+        reader.onerror = () => {
+             this.actionStatus = { message: 'Failed to read the file.', isError: true };
+        };
+        reader.readAsText(file);
+    },
+    
+    async handleGoogleSheetImport() {
+        if (!this.googleSheetUrl) {
+            this.actionStatus = { message: 'Please enter a Google Sheet URL.', isError: true };
+            return;
         }
-      });
+
+        this.isActionLoading = true;
+        this.actionStatus = null;
+        this.phoneNumbers = null;
+
+        try {
+            // Regex to extract the Sheet ID from various URL formats
+            const sheetIdMatch = this.googleSheetUrl.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+            if (!sheetIdMatch || !sheetIdMatch[1]) {
+                throw new Error("Invalid Google Sheet URL. Could not find Sheet ID.");
+            }
+            const sheetId = sheetIdMatch[1];
+
+            // Regex to extract GID (sheet number), defaults to 0
+            const gidMatch = this.googleSheetUrl.match(/[#&]gid=([0-9]+)/);
+            const gid = gidMatch ? gidMatch[1] : '0';
+
+            const csvExportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+            
+            this.actionStatus = { message: 'Fetching data from Google Sheet...', isError: false };
+
+            const response = await axios.get(csvExportUrl);
+            
+            // Check if response is HTML, which indicates an error (e.g., private sheet)
+            if (typeof response.data === 'string' && response.data.trim().startsWith('<!DOCTYPE html>')) {
+                 throw new Error("Could not fetch data. Please ensure the Google Sheet is public ('Anyone with the link can view').");
+            }
+            
+            this.parseCsvData(response.data);
+
+        } catch (error) {
+            console.error('Error importing from Google Sheet:', error);
+            this.actionStatus = { message: error.message || 'Failed to import from Google Sheet.', isError: true };
+        } finally {
+            this.isActionLoading = false;
+        }
     },
 
     buildTemplatePayload() {
@@ -239,7 +317,7 @@ export default {
 
       try {
         const payload = this.buildTemplatePayload();
-        const response = await axios.post(`${this.apiUrl}/create-template`, payload, config); // Added auth config
+        const response = await axios.post(`${this.apiUrl}/create-template`, payload, config);
         this.actionStatus = { message: `Template '${response.data.name}' created successfully with ID: ${response.data.id}`, isError: false };
       } catch (error) {
         console.error('Error creating template:', error);
@@ -265,7 +343,7 @@ export default {
           phone_number_dict: this.phoneNumbers,
         };
         
-        const response = await axios.post(`${this.apiUrl}/create-template/send`, fullPayload, config); // Added auth config
+        const response = await axios.post(`${this.apiUrl}/create-template/send`, fullPayload, config);
         this.actionStatus = { message: `Template created. Messages queued to ${response.data.queued_to.length} numbers.`, isError: false };
 
       } catch (error) {
@@ -279,7 +357,3 @@ export default {
   },
 };
 </script>
-
-<style scoped>
-
-</style>
