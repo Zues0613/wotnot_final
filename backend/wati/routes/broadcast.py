@@ -1109,7 +1109,7 @@ async def create_template(
     try:
         template_data = request.model_dump(mode='json')    # Convert Pydantic model to dictionary
         broadcast.TemplateCreate.validate_template(template_data)  # Validate template
-
+        print("HEY")
         # WhatsApp API URL and headers
         url = f"https://graph.facebook.com/v21.0/{get_current_user.WABAID}/message_templates"
         headers = {
@@ -1135,8 +1135,83 @@ async def create_template(
     except HTTPException as e:
         logging.critical(f"HTTP Exception: {e.detail}")
         raise e  # No need to wrap again
+from fastapi import Depends, HTTPException, BackgroundTasks, Body
 
+async def send_message_bg(phone: str, message: str, waba_id: str, access_token: str):
+    """
+    Sends a WhatsApp text message in the background.
+    """
+    url = f"https://graph.facebook.com/v21.0/{waba_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
 
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": phone,
+        "type": "text",
+        "text": {"body": message}
+    }
+
+    timeout = httpx.Timeout(30.0, connect=30.0)
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(url, headers=headers, json=payload)
+        if response.status_code != 200:
+            logging.error(f"❌ Failed to send message to {phone}: {response.text}")
+        else:
+            logging.info(f"✅ Message sent successfully to {phone}")
+@router.post("/create-template/send", response_model=broadcast.TemplateResponse)
+async def create_template_and_send(
+    background_tasks: BackgroundTasks,
+    request: broadcast.TemplateCreate,
+    phone_number_dict: dict[str, str] = Body(..., example={"919999999999": "Tony", "918888888888": "Bruce"}),
+    
+    get_current_user: user.newuser = Depends(get_current_user),
+    
+):
+    """
+    Create a new WhatsApp template AND send greetings
+    to the provided phone numbers in background.
+    """
+    try:
+        # Convert Pydantic model → dict
+        template_data = request.model_dump(mode="json")
+        broadcast.TemplateCreate.validate_template(template_data)
+
+        # WhatsApp API URL
+        url = f"https://graph.facebook.com/v21.0/{get_current_user.WABAID}/message_templates"
+        headers = {
+            "Authorization": f"Bearer {get_current_user.PAccessToken}",
+            "Content-Type": "application/json"
+        }
+
+        # Create template first
+        timeout = httpx.Timeout(30.0, connect=30.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(url, headers=headers, json=template_data)
+            response_data = response.json()
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response_data)
+
+        # ✅ Queue background messages
+        for phone, name in phone_number_dict.items():
+            custom_message = f"🪔 Happy Diwali {name}! Wishing you prosperity and joy ✨"
+            background_tasks.add_task(
+                send_message_bg, phone, custom_message,
+                get_current_user.WABAID, get_current_user.PAccessToken
+            )
+
+        return {
+            "template_response": response_data,
+            "queued_to": list(phone_number_dict.keys())
+        }
+
+    except HTTPException as e:
+        logging.critical(f"HTTP Exception: {e.detail}")
+        raise e
 
 
 @router.delete("/delete-template/{template_name}")
