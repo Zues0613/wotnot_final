@@ -1136,11 +1136,16 @@ async def create_template(
         logging.critical(f"HTTP Exception: {e.detail}")
         raise e  # No need to wrap again
 from fastapi import Depends, HTTPException, BackgroundTasks, Body
+import aiosmtplib
+from email.message import EmailMessage
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'sierramapsdev@gmail.com'
+EMAIL_HOST_PASSWORD = 'yrnpubswdodbrijs'  # This is your Gmail App Password
+
+"""
 
 async def send_message_bg(phone: str, message: str, waba_id: str, access_token: str):
-    """
-    Sends a WhatsApp text message in the background.
-    """
     url = f"https://graph.facebook.com/v21.0/{waba_id}/messages"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -1171,10 +1176,6 @@ async def create_template_and_send(
     get_current_user: user.newuser = Depends(get_current_user),
     
 ):
-    """
-    Create a new WhatsApp template AND send greetings
-    to the provided phone numbers in background.
-    """
     try:
         # Convert Pydantic model → dict
         template_data = request.model_dump(mode="json")
@@ -1211,35 +1212,71 @@ async def create_template_and_send(
 
     except HTTPException as e:
         logging.critical(f"HTTP Exception: {e.detail}")
-        raise e
+        raise e"""
+from pydantic import BaseModel
+class EmailBroadcastRequest(BaseModel):
+    request: broadcast.TemplateCreate
+    email_dict: dict[str, str]
+async def send_email_bg(recipient_email: str, subject: str, body: str):
+    """
+    Sends an email in the background using aiosmtplib.
+    """
+    message = EmailMessage()
+    message["From"] = EMAIL_HOST_USER
+    message["To"] = recipient_email
+    message["Subject"] = subject
+    message.set_content(body)
+
+    try:
+        await aiosmtplib.send(
+            message,
+            hostname=EMAIL_HOST,
+            port=EMAIL_PORT,
+            username=EMAIL_HOST_USER,
+            password=EMAIL_HOST_PASSWORD,
+            start_tls=True,
+        )
+        print("EMAIL SEND ")
+        logging.info(f"✅ Email sent successfully to {recipient_email}")
+    except Exception as e:
+        # Catches potential SMTP errors (login failure, connection issues, etc.)
+        logging.error(f"❌ Failed to send email to {recipient_email}: {e}")
 
 
-@router.delete("/delete-template/{template_name}")
-async def DeleteTemplate(   
-    template_name:str,
-    request: Request,
-    get_current_user: user.newuser = Depends(get_current_user)):
-        
-        '''
-        Endpoint to delete a WhatsApp template.
-        This endpoint sends a DELETE request to the WhatsApp API to remove the specified template.
-        '''
+# 2. Updated Endpoint to Queue Emails (No Template Creation)
+@router.post("/create-template/send")
+async def create_template_and_send(
+    background_tasks: BackgroundTasks,
+    # The function now accepts one 'payload' argument of our new type
+    payload: EmailBroadcastRequest,
+    current_user: user.newuser = Depends(get_current_user),
+):
+    """
+    Sends a personalized email to a list of recipients in the background.
+    """
+    # Access the data from the payload object
+    template_data = payload.request.model_dump()
+    email_dict = payload.email_dict
 
-        url = f"https://graph.facebook.com/v14.0/{get_current_user.WABAID}/message_templates?name={template_name}"
-        headers = {
-            "Authorization": f"Bearer {get_current_user.PAccessToken}",
-            "Content-Type": "application/json"
-        }
+    subject = template_data.get('name', 'A message from our service')
+    
+    base_body = "No content provided."
+    if template_data.get('components') and len(template_data['components']) > 0:
+        base_body = template_data['components'][0].get('text', base_body)
 
+    for email, name in email_dict.items():
+        personalized_body = f"Hi {name},\n\n{base_body}"
+        background_tasks.add_task(
+            send_email_bg,
+            recipient_email=email,
+            subject=subject,
+            body=personalized_body
+        )
 
-        async with httpx.AsyncClient() as client:
-            response = await client.delete(url, headers=headers)
-
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.json())
-        
-        return {"Template deleted successfully"}
-
+    return {
+        "message": "Email sending process has been initiated.",
+        "queued_for": list(email_dict.keys())
+    }
 
 @router.get("/broadcast-report/{broadcast_id}")
 async def BroadcastReport(
