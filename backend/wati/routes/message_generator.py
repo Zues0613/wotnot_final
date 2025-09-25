@@ -1,6 +1,6 @@
 import os
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse # Import JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -23,16 +23,17 @@ class Prompt(BaseModel):
     prompt: str
 
 @router.post('/api/generate-message')
-async def generate_message(prompt: Prompt):
+def generate_message(prompt: Prompt):
     """
     Generates a message using the Gemini API based on the provided prompt.
     """
     try:
-        # Initialize the generative model
-        model = genai.GenerativeModel('gemini-2.0-flash-lite', system_instruction=SYSTEM_PROMPT)
+        print("HERE")
+        # The model initialization remains the same
+        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_PROMPT)
         
-        # Generate content asynchronously
-        response = await model.generate_content_async(prompt.prompt)
+        # Generate content synchronously
+        response = model.generate_content(prompt.prompt)
 
         # Return the generated text in the response
         return {"message": response.text}
