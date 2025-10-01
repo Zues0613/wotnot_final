@@ -1,2 +1,114 @@
-/venv
+# ------------------------------
+#  Python
+# ------------------------------
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# PyInstaller
+*.spec
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Unit test / coverage reports
+.coverage
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Django stuff
+*.log
+local_settings.py
+db.sqlite3
+
+# Flask stuff
+instance/
+*.db
+
+# mypy / pytype / pytest / etc.
+.mypy_cache/
+.pytest_cache/
+.pyre/
+.pytype/
+
+# ------------------------------
+#  Node.js / NPM / JS
+# ------------------------------
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+
+# Dependency directories
+jspm_packages/
+
+# Cache & logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ------------------------------
+#  OS & Editor Files
+# ------------------------------
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# ------------------------------
+#  Miscellaneous
+# ------------------------------
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Lock files (optional)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+poetry.lock

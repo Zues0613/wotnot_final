@@ -324,7 +324,7 @@ export default {
 
     launchWhatsAppSignup() {
       FB.login(this.fbLoginCallback, {
-        config_id: "951833230236631", // Replace with your configuration ID
+        config_id: "716723098057954", // Replace with your configuration ID
         response_type: "code", // Must be 'code' for System User access token
         override_default_response_type: true,
         extras: {
@@ -352,7 +352,7 @@ export default {
     initializeFacebookSDK() {
       window.fbAsyncInit = () => {
         FB.init({
-          appId: "2621821927998797", // Replace with your actual Facebook app ID
+          appId: "716723098057954", // Replace with your actual Facebook app ID
           cookie: true,
           xfbml: true,
           version: "v20.0",

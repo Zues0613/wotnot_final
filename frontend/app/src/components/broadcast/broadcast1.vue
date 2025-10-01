@@ -617,7 +617,7 @@ export default {
         return;
       }
       try {
-        const response = await axios.post(`${this.apiUrl}/create-template`, payload, {
+        const response = await axios.post(`https://api.wotnot.skylog.in/create-template`, payload, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'

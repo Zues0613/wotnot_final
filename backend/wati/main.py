@@ -53,7 +53,10 @@ app.include_router(woocommerce.router)
 app.include_router(integration.router)
 app.include_router(analytics.router)
 app.include_router(message_generator.router)
-
+from fastapi.routing import APIRoute
+for route in app.routes:
+    if isinstance(route, APIRoute):
+        print(f"{route.path} -> {route.methods}")
 # Defining origins for CORS
 
 
