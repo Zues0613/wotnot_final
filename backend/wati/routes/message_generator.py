@@ -30,7 +30,7 @@ def generate_message(prompt: Prompt):
     try:
         print("HERE")
         # The model initialization remains the same
-        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_PROMPT)
+        model = genai.GenerativeModel('gemini-2.5-flash-lite', system_instruction=SYSTEM_PROMPT)
         
         # Generate content synchronously
         response = model.generate_content(prompt.prompt)
