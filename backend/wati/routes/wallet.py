@@ -27,7 +27,7 @@ async def get_conversation_analytics(account_id: int, db: AsyncSession = Depends
     ACCESS_TOKEN = get_current_user.PAccessToken
 
     # Fetch account creation time asynchronously
-    result = await db.execute(select(User.User).filter(User.User.WABAID == account_id))
+    result = await db.execute(select(User).filter(User.WABAID == account_id))
     account_creation_time = result.scalars().first()
     
     if not account_creation_time:
@@ -57,7 +57,7 @@ async def get_conversation_cost_history(
     ACCESS_TOKEN = get_current_user.PAccessToken
 
     # Fetch account creation time asynchronously
-    result = await db.execute(select(User.User).filter(User.User.WABAID == get_current_user.WABAID))
+    result = await db.execute(select(User).filter(User.WABAID == get_current_user.WABAID))
     account_creation_time = result.scalars().first()
     
     if not account_creation_time:
@@ -119,7 +119,7 @@ async def get_conversation_costs(account_id: int, db: AsyncSession = Depends(dat
     ACCESS_TOKEN = get_current_user.PAccessToken
 
     # Fetch account details asynchronously
-    result = await db.execute(select(User.User).filter(User.User.WABAID == account_id))
+    result = await db.execute(select(User).filter(User.WABAID == account_id))
     account_details = result.scalars().first()
     
     if not account_details:
@@ -162,7 +162,7 @@ async def get_conversation_cost_history(
     ACCESS_TOKEN = get_current_user.PAccessToken
 
     # Fetch account creation time asynchronously
-    result = await db.execute(select(User.User).filter(User.User.WABAID == get_current_user.WABAID))
+    result = await db.execute(select(User).filter(User.WABAID == get_current_user.WABAID))
     account_creation_time = result.scalars().first()
     
     if not account_creation_time:

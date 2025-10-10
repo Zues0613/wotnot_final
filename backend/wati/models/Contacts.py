@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 class Contact(database.Base):
     __tablename__ = "contacts"
     id = Column(Integer, primary_key=True, index=True)
-    user_id=Column(Integer,ForeignKey(User.User.id))
+    user_id=Column(Integer,ForeignKey("Users.id"))
     name = Column(String, index=True)
     email = Column(String,  index=True)
     phone = Column(String,  index=True)

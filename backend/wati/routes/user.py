@@ -50,8 +50,8 @@ async def process_responses(
    
 
     current_user= await db.execute(
-        select(User.User).filter(
-            User.User.id == get_current_user.id
+        select(User).filter(
+            User.id == get_current_user.id
         )
     )
     current_user = current_user.scalars().first()
@@ -139,8 +139,8 @@ async def new_user(
     
     # Check for existing user
     result = await db.execute(
-        select(User.User).filter(
-            (User.User.email == request.email)
+        select(User).filter(
+            (User.email == request.email)
         )
     )
     existing_user = result.scalars().first()
@@ -153,7 +153,7 @@ async def new_user(
 
     # Create a new user
     api_key = secrets.token_hex(32)
-    registeruser = User.User(
+    registeruser = User(
         username=request.username,
         email=request.email,
         password_hash=hashing.Hash.bcrypt(request.password),  # Decode the hash to store it as a string
@@ -323,6 +323,14 @@ def get_business_profile(get_current_user: user.newuser = Depends(get_current_us
     Fetch the WhatsApp Business Profile details.
     """
     
+    # Check if WhatsApp Business Account credentials are configured
+    if not get_current_user.PAccessToken or not get_current_user.Phone_id:
+        return {
+            "success": False,
+            "message": "WhatsApp Business Account not configured. Please configure in Profile Settings.",
+            "data": []
+        }
+    
     BASE_URL = "https://graph.facebook.com/v17.0"
     ACCESS_TOKEN = get_current_user.PAccessToken
     PHONE_NUMBER_ID = get_current_user.Phone_id
@@ -331,8 +339,18 @@ def get_business_profile(get_current_user: user.newuser = Depends(get_current_us
         "Authorization": f"Bearer {ACCESS_TOKEN}"
     }
 
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail=response.json())
-
-    return response.json()
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            return {
+                "success": False,
+                "message": "Failed to fetch WhatsApp profile",
+                "data": []
+            }
+        return response.json()
+    except Exception as e:
+        return {
+            "success": False,
+            "message": str(e),
+            "data": []
+        }

@@ -11,7 +11,18 @@
     <!-- Broadcast List Table -->
     <h3 class="mb-4 text-xl text-green-800 md:text-2xs"><b>Scheduled Broadcast List</b></h3>
 
-    <div class="overflow-x-auto max-h-[60vh] custom-scrollbar">
+    <!-- Show empty state when no scheduled broadcasts -->
+    <div v-if="broadcasts.length === 0" class="flex flex-col items-center justify-center p-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+      <svg class="w-20 h-20 mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+      </svg>
+      <h3 class="text-xl font-semibold text-gray-700 mb-2">No Scheduled Broadcasts</h3>
+      <p class="text-gray-500 mb-4 text-center">You haven't scheduled any broadcasts yet</p>
+      <p class="text-sm text-gray-400 text-center">Schedule broadcasts from the Broadcast Messages tab to see them here</p>
+    </div>
+
+    <!-- Show table when scheduled broadcasts exist -->
+    <div v-if="broadcasts.length > 0" class="overflow-x-auto max-h-[60vh] custom-scrollbar">
       <table class="w-full text-sm bg-white border border-gray-300 rounded-lg md:text-base">
         <thead>
           <tr class="font-semibold text-center text-gray-700 bg-gray-100">

@@ -760,7 +760,7 @@ async def schedule_woo_task(integration_id: int):
                         await db.refresh(db_broadcast_list)
 
                         # Send broadcast
-                        query = await db.execute(select(User.User).filter(User.User.id == integration.user_id))
+                        query = await db.execute(select(User).filter(User.id == integration.user_id))
                         user = query.scalars().first()
 
                         if not user:

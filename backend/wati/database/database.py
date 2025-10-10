@@ -31,10 +31,30 @@ SQLALCHEMY_DATABASE_URL = database_url
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+import ssl
 
-
-
-engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True,pool_recycle=120,pool_pre_ping=True,pool_size=30 )
+# Clean the database URL for asyncpg (remove psycopg2-specific parameters)
+# asyncpg doesn't accept 'sslmode' and 'channel_binding' as URL parameters
+if SQLALCHEMY_DATABASE_URL:
+    # Remove psycopg2-specific SSL parameters from URL
+    cleaned_url = SQLALCHEMY_DATABASE_URL.split('?')[0]
+    
+    # Configure SSL for asyncpg using connect_args
+    connect_args = {
+        "ssl": ssl.create_default_context(),
+        "server_settings": {"jit": "off"}  # Disable JIT for better compatibility
+    }
+    
+    engine = create_async_engine(
+        cleaned_url, 
+        echo=True,
+        pool_recycle=120,
+        pool_pre_ping=True,
+        pool_size=30,
+        connect_args=connect_args
+    )
+else:
+    raise ValueError("DATABASE_URL environment variable is not set")
 
 # Create a session factory
 AsyncSessionLocal = sessionmaker(

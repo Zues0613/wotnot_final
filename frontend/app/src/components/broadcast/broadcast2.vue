@@ -197,7 +197,7 @@
         </div>
       </div>
 
-      <div class="flex justify-between">
+      <div v-if="broadcasts.length > 0" class="flex justify-between">
         <div class="flex items-center space-x-2 filter-container">
           <h3><b>Filter by:</b></h3>
           <div class="w-40px">
@@ -212,7 +212,25 @@
       </div>
     </div>
 
-    <div class="overflow-x-auto max-h-[51vh] custom-scrollbar">
+    <!-- Show empty state when no broadcasts -->
+    <div v-if="!loading && broadcasts.length === 0" class="flex flex-col items-center justify-center p-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+      <svg class="w-20 h-20 mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
+      </svg>
+      <h3 class="text-xl font-semibold text-gray-700 mb-2">No Broadcasts Yet</h3>
+      <p class="text-gray-500 mb-4 text-center">Start engaging your audience by creating your first broadcast</p>
+      <button
+        class="flex items-center justify-center px-6 py-3 font-medium text-white bg-green-700 rounded-lg shadow-lg hover:bg-green-600"
+        @click="showPopup = true, fetchContacts()">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
+        </svg>
+        Create First Broadcast
+      </button>
+    </div>
+
+    <!-- Show table when broadcasts exist -->
+    <div v-if="broadcasts.length > 0" class="overflow-x-auto max-h-[51vh] custom-scrollbar">
       <table class="w-full text-sm bg-white border border-gray-300 rounded-lg md:text-base">
         <thead>
           <tr class="font-semibold text-center text-gray-700 bg-gray-100">
@@ -250,9 +268,9 @@
           </tr>
         </tbody>
       </table>
-    </div>
-
-    <div class="flex justify-center mt-4">
+    
+      <!-- Pagination (only show when broadcasts exist) -->
+      <div class="flex justify-center mt-4">
       <div class="flex items-center px-4 py-2 space-x-4 bg-white rounded-lg shadow-md">
         <button
           class="px-3 py-1 font-medium text-white bg-green-500 rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -266,6 +284,7 @@
           @click="loadNextPage">
           Next
         </button>
+      </div>
       </div>
     </div>
 
@@ -401,7 +420,8 @@ export default {
   props: {
     contactReport: {
       type: Object,
-      required: true,
+      required: false,
+      default: () => ({})
     },
   },
   data() {
@@ -598,6 +618,12 @@ export default {
 
     async fetchtemplateList() {
       const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('No token found, skipping template fetch');
+        this.templates = [];
+        return;
+      }
+
       try {
         const response = await fetch(`${this.apiUrl}/template`, {
           method: 'GET',
@@ -608,13 +634,20 @@ export default {
         });
 
         if (!response.ok) {
+          // Handle 401 gracefully - WhatsApp Business Account not configured
+          if (response.status === 401) {
+            console.warn('Unauthorized - WhatsApp Business Account not configured yet');
+            this.templates = [];
+            return;
+          }
           throw new Error('Network response was not ok');
         }
 
         const templatelist = await response.json();
-        this.templates = templatelist.data;
+        this.templates = templatelist.data || [];
       } catch (error) {
         console.error("There was an error fetching the templates:", error);
+        this.templates = [];
       }
     },
 
@@ -717,9 +750,19 @@ export default {
 
     async fetchBroadcastList(statusFilter = null, page = 1) {
       const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('No token found, skipping broadcast fetch');
+        this.loading = false;
+        this.broadcasts = [];
+        return;
+      }
+
       const itemsPerPage = 10;
       this.filterStatus = statusFilter;
-      const url = `${this.apiUrl}/broadcast?limit=${itemsPerPage}&offset=${(page - 1) * itemsPerPage}&statusfilter=${this.filterStatus || ''}`;
+      
+      // Fix URL: remove trailing colon if statusfilter is empty
+      const statusParam = this.filterStatus ? `&statusfilter=${this.filterStatus}` : '';
+      const url = `${this.apiUrl}/broadcast?limit=${itemsPerPage}&offset=${(page - 1) * itemsPerPage}${statusParam}`;
 
       try {
         this.loading = true;
@@ -730,12 +773,23 @@ export default {
             'Content-Type': 'application/json',
           },
         });
-        if (!response.ok) throw new Error('Network response was not ok');
-        const broadcastList = await response.json();
-        this.loading = false;
-        this.broadcasts = broadcastList.map((broadcast) => ({ ...broadcast }));
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.warn('No broadcasts found or endpoint not available');
+            this.broadcasts = [];
+          } else {
+            throw new Error('Network response was not ok');
+          }
+        } else {
+          const broadcastList = await response.json();
+          this.broadcasts = broadcastList.map((broadcast) => ({ ...broadcast }));
+        }
       } catch (error) {
         console.error('Error fetching broadcasts:', error);
+        this.broadcasts = [];
+      } finally {
+        this.loading = false;
       }
     },
 

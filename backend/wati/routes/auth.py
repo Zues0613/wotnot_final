@@ -50,7 +50,7 @@ router = APIRouter()
 async def login(request: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(database.get_db)):
     # Find the user by email
     result = await db.execute(
-        select(User.User).filter(User.User.email == request.username)
+        select(User).filter(User.email == request.username)
     )
     user = result.scalars().first()
 

@@ -888,18 +888,23 @@ async def fetchbroadcastList(
     db: AsyncSession = Depends(database.get_db),  # Ensure this is your async db session dependency
     get_current_user: user.newuser = Depends(get_current_user)
 ):
+    """
+    Fetch broadcast list with pagination and filtering.
+    Returns empty list if no broadcasts found instead of raising 404.
+    """
     # Start building the query
-   
-
-    query = select(Broadcast.BroadcastList).filter(Broadcast.BroadcastList.user_id == get_current_user.id).order_by(desc(Broadcast.BroadcastList.id))
-
+    query = select(Broadcast.BroadcastList).filter(
+        Broadcast.BroadcastList.user_id == get_current_user.id
+    ).order_by(desc(Broadcast.BroadcastList.id))
 
     # Apply tag filtering if provided
     if tag:
-        query = query.filter(Broadcast.BroadcastList.template.ilike(f"%{tag}%")) # Adjust field as needed
+        query = query.filter(Broadcast.BroadcastList.template.ilike(f"%{tag}%"))
 
-    if statusfilter!="null" :
-        query=query.filter(Broadcast.BroadcastList.status==statusfilter)
+    # Apply status filtering if provided (handle empty strings and "null")
+    if statusfilter and statusfilter not in ["null", "", "None"]:
+        query = query.filter(Broadcast.BroadcastList.status == statusfilter)
+    
     # Apply pagination
     query = query.offset(offset).limit(limit)
 
@@ -907,9 +912,9 @@ async def fetchbroadcastList(
     result = await db.execute(query)
     broadcast_list = result.scalars().all()
 
-    # Check if any broadcasts were found
+    # Return empty list if no broadcasts found (don't raise 404)
     if not broadcast_list:
-        raise HTTPException(status_code=404, detail="No broadcasts found")
+        return []
 
     return broadcast_list
 
@@ -1001,25 +1006,44 @@ async def import_contacts(file: UploadFile = File(...), db: AsyncSession = Depen
 
 @router.get("/template")
 async def get_templates(get_current_user: user.newuser = Depends(get_current_user)):
+    """
+    Fetches the list of templates from the WhatsApp Business API.
+    """
+    
+    # Check if WhatsApp Business Account credentials are configured
+    if not get_current_user.PAccessToken or not get_current_user.WABAID:
+        return {
+            "success": False,
+            "message": "WhatsApp Business Account not configured. Please configure in Profile Settings.",
+            "data": []
+        }
+    
     API_URL = f'https://graph.facebook.com/v15.0/{get_current_user.WABAID}/message_templates'
     headers = {
         'Authorization': f'Bearer {get_current_user.PAccessToken}'
     }
 
-    '''
-    Fetches the list of templates from the WhatsApp Business API.
-    '''
+    try:
+        # Make an asynchronous HTTP GET request
+        async with httpx.AsyncClient() as client:
+            response = await client.get(API_URL, headers=headers)
+        
+        # Check for errors in the API response
+        if response.status_code != 200:
+            return {
+                "success": False,
+                "message": "Failed to fetch templates from WhatsApp",
+                "data": []
+            }
 
-    # Make an asynchronous HTTP GET request
-    async with httpx.AsyncClient() as client:
-        response = await client.get(API_URL, headers=headers)
-    
-    # Check for errors in the API response
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-
-    data = response.json()
-    return data
+        data = response.json()
+        return data
+    except Exception as e:
+        return {
+            "success": False,
+            "message": str(e),
+            "data": []
+        }
 
 
 

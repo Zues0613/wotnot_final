@@ -29,6 +29,23 @@ pip install -r requirements.txt
 
 ---
 
+### 3. Database Migration
+
+Before running the server for the first time, create the database tables:
+
+```bash
+python migrate_db.py --action create
+```
+
+**Migration Options:**
+- `--action create` - Create all tables (default)
+- `--action drop` - Drop all tables (requires confirmation)
+- `--action recreate` - Drop and recreate all tables (requires confirmation)
+
+**Note:** The tables will also be created automatically when you start the server for the first time.
+
+---
+
 ## 🚀 Running the Backend Server
 
 To start the FastAPI server with **Uvicorn**:

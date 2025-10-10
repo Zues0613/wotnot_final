@@ -39,7 +39,7 @@ async def verify_api_key(request: Request, db: AsyncSession ):
         raise HTTPException(status_code=401, detail="API key missing")
 
     # Check if API key exists in the database
-    result =await db.execute(select(User.User).filter(User.User.api_key == api_key))
+    result =await db.execute(select(User).filter(User.api_key == api_key))
 
     user=result.scalars().first()
     

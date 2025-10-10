@@ -9,7 +9,7 @@ from sqlalchemy import Column, String, TIMESTAMP, ForeignKey, func
 class Integration(database.Base):
     __tablename__="Integration"
     id=Column(Integer,primary_key=True)
-    user_id=Column(Integer,ForeignKey(User.User.id))
+    user_id=Column(Integer,ForeignKey("Users.id"))
     api_key=Column(String)
     app=Column(String)
     created_at = Column(TIMESTAMP, server_default=func.now())
@@ -20,7 +20,7 @@ class Integration(database.Base):
 class Integration_credentials(database.Base):
     __tablename__="integration_credentials"
     id=Column(Integer,primary_key=True)
-    user_id= Column(Integer,ForeignKey(User.User.id))
+    user_id= Column(Integer,ForeignKey("Users.id"))
     app=Column(String) #"WooCommerce", "Shopify", etc.
     store_name=Column(String)
     client_key= Column(String)
@@ -33,9 +33,9 @@ class Integration_credentials(database.Base):
 class WooIntegration(database.Base):
     __tablename__="Woo_Integration"
     id=Column(Integer,primary_key=True)
-    integration_id=Column(Integer,ForeignKey(Integration.id))
+    integration_id=Column(Integer,ForeignKey("Integration.id"))
     description=Column(String,nullable=True)
-    user_id=Column(Integer,ForeignKey(User.User.id))
+    user_id=Column(Integer,ForeignKey("Users.id"))
     api_key=Column(String,nullable=True)
     rest_key=Column(String,nullable=True) 
     rest_secret=Column(String,nullable=True)

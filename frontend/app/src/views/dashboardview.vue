@@ -406,6 +406,11 @@ export default {
     async fetchProfile() {
       try {
         const token = localStorage.getItem("token");
+        if (!token) {
+          console.warn('No token found, skipping profile fetch');
+          return;
+        }
+
         const response = await axios.get(`${this.apiUrl}/get-business-profile/`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -427,7 +432,15 @@ export default {
           this.originalProfile = { ...this.profile };
         }
       } catch (error) {
-        console.error("Error fetching profile:", error.response?.data?.detail || error.message);
+        // Handle errors gracefully - WhatsApp Business Account may not be configured yet
+        if (error.response?.status === 401) {
+          console.warn('Unauthorized - WhatsApp Business Account credentials not configured');
+        } else if (error.response?.status === 404 || error.response?.status === 400) {
+          console.warn('WhatsApp Business Profile not available');
+        } else {
+          console.error("Error fetching profile:", error.response?.data?.detail || error.message);
+        }
+        // Don't show error to user - this is expected for new users
       } finally {
         this.loading = false;
       }
