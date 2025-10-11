@@ -79,18 +79,18 @@
 
         <!-- Broadcast Section Sidebar -->
         <div v-if="currentSection === 'broadcast'">
-          <a href="#" @click.prevent="navigate('/broadcast/broadcast2')"
-            :class="{ 'text-green-800 font-semibold': isActive('/broadcast/broadcast2'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/broadcast/broadcast2') }"
+          <a href="#" @click.prevent="navigate('/broadcast/messages')"
+            :class="{ 'text-green-800 font-semibold': isActive('/broadcast/messages'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/broadcast/messages') }"
             class="block rounded-lg p-3 text-gray-600">
             <i class="bi bi-broadcast mr-2"></i>Broadcast Messages
           </a>
-          <a href="#" @click.prevent="navigate('/broadcast/broadcast1')"
-            :class="{ 'text-green-800 font-semibold': isActive('/broadcast/broadcast1'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/broadcast/broadcast1') }"
+          <a href="#" @click.prevent="navigate('/broadcast/templates')"
+            :class="{ 'text-green-800 font-semibold': isActive('/broadcast/templates'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/broadcast/templates') }"
             class="block rounded-lg p-3 text-gray-600">
             <i class="bi bi-chat-right-text-fill mr-2"></i>Manage Templates
           </a>
-          <a href="#" @click.prevent="navigate('/broadcast/broadcast3')"
-            :class="{ 'text-green-800 font-semibold': isActive('/broadcast/broadcast3'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/broadcast/broadcast3') }"
+          <a href="#" @click.prevent="navigate('/broadcast/scheduled')"
+            :class="{ 'text-green-800 font-semibold': isActive('/broadcast/scheduled'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/broadcast/scheduled') }"
             class="block rounded-lg p-3 text-gray-600">
             <i class="bi bi-calendar2-range-fill mr-2"></i>Scheduled Broadcasts
           </a>
@@ -98,13 +98,13 @@
 
         <!-- Contacts Section Sidebar -->
         <div v-if="currentSection === 'Contacts'">
-          <a href="#" @click.prevent="navigate('/contacts/contacts1')"
-            :class="{ 'text-green-800 font-semibold': isActive('/contacts/contacts1'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/contacts/contacts1') }"
+          <a href="#" @click.prevent="navigate('/contacts/list')"
+            :class="{ 'text-green-800 font-semibold': isActive('/contacts/list'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/contacts/list') }"
             class="block rounded-lg p-3 text-gray-600">
             <i class="bi bi-journal-bookmark-fill mr-2 "></i>Manage Contacts
           </a>
-          <a href="#" @click.prevent="navigate('/contacts/contacts2')"
-            :class="{ 'text-green-800 font-semibold': isActive('/contacts/contacts2'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/contacts/contacts2') }"
+          <a href="#" @click.prevent="navigate('/contacts/groups')"
+            :class="{ 'text-green-800 font-semibold': isActive('/contacts/groups'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/contacts/groups') }"
             class="block rounded-lg p-3 text-gray-600">
             <i class="bi bi-tags-fill mr-2"></i>Manage Tags
           </a>
@@ -112,8 +112,8 @@
 
         <!-- Integration Section Sidebar -->
         <div v-if="currentSection === 'Integration'">
-          <a href="#" @click.prevent="navigate('/integration/integration1')"
-            :class="{ 'text-green-800 font-semibold': isActive('/integration/integration1'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/integration/integration1') }"
+          <a href="#" @click.prevent="navigate('/integration/woocommerce')"
+            :class="{ 'text-green-800 font-semibold': isActive('/integration/woocommerce'), 'hover:bg-gray-200 hover:font-semibold': !isActive('/integration/woocommerce') }"
             class="block rounded-lg p-3 text-gray-600"><i class="bi bi-link-45deg"></i>
             Woocommerce
           </a>
@@ -179,10 +179,10 @@ export default {
         whatsapp_business_id: '',
       },
       navItems: [
-        { name: 'broadcast', label: 'Broadcast', icon: 'bi bi-broadcast', path: '/broadcast/broadcast2' },
-        { name: 'Contacts', label: 'Contacts', icon: 'bi bi-person-video2', path: '/contacts/contacts1' },
-        { name: 'Integration', label: 'Integration', icon: 'bi bi-plugin', path: '/integration/integration1' },
-        { name: 'chatbot', label: 'Chatbot', path: '/chatbot/chatbotview', icon: 'bi bi-robot' },
+        { name: 'broadcast', label: 'Broadcast', icon: 'bi bi-broadcast', path: '/broadcast/messages' },
+        { name: 'Contacts', label: 'Contacts', icon: 'bi bi-person-video2', path: '/contacts/list' },
+        { name: 'Integration', label: 'Integration', icon: 'bi bi-plugin', path: '/integration/woocommerce' },
+        { name: 'chatbot', label: 'Chatbot', path: '/chatbot', icon: 'bi bi-robot' },
         { name: 'Analytics', label: 'Analytics', path: '/analytics/cost', icon: 'bi bi-graph-up' },
       ],
       user: null,

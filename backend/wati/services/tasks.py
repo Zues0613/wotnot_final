@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from dramatiq import Middleware
 from ..models import Broadcast,Integration,User  # Adjust this import as needed based on your project structure
 import json
+import logging
 from ..routes import contacts
 from dramatiq.middleware import Middleware,SkipMessage
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -189,36 +190,48 @@ async def send_broadcast(
     body_parameters,
     Phone_id):
     """
-    Dramatiq actor to send broadcast messages.
+    Dramatiq actor to send scheduled broadcast messages.
+    
+    OPTIMIZATIONS:
+    - Batch database commits (commit once after all messages)
+    - Rate limiting to prevent WhatsApp API throttling (20 msg/sec)
+    - Better error handling (doesn't fail task if some messages succeed)
+    - Cancellation support (checks if broadcast was cancelled)
     """
-    db = await anext(get_db())  # Get the db session from the async generator
+    db = await anext(get_db())
     try:
         success_count = 0
         failed_count = 0
         errors = []
 
-        # Skip if the broadcast status says cancelled
+        # Check if broadcast was cancelled before starting
         result = await db.execute(
             select(Broadcast.BroadcastList).filter(Broadcast.BroadcastList.id == broadcastId)
         )
         broadcast = result.scalars().first()
 
         if not broadcast:
+            logging.error(f"Broadcast {broadcastId} not found")
             raise HTTPException(status_code=404, detail="Broadcast not found")
         
         if broadcast.status == "Cancelled":
-            print(f"Broadcast {broadcastId} is cancelled. Terminating task.")
+            logging.info(f"Broadcast {broadcastId} was cancelled. Terminating task.")
             raise SkipMessage()
+
+        # Parse template_data once (not in loop)
+        if isinstance(template_data, str):
+            template_data_json = json.loads(template_data)
+        else:
+            template_data_json = template_data
+        
+        Templatelanguage = template_data_json.get("language")
 
         async with httpx.AsyncClient() as client:
             for contact in recipients:
                 recipient_name = contact["name"]
                 recipient_phone = contact["phone"]
 
-                if isinstance(template_data, str):
-                    template_data_json = json.loads(template_data)
-                Templatelanguage = template_data_json.get("language")
-
+                # Build WhatsApp API payload
                 data = {
                     "messaging_product": "whatsapp",
                     "to": recipient_phone,
@@ -229,6 +242,7 @@ async def send_broadcast(
                     }
                 }
 
+                # Add header media if provided
                 if image_id:
                     data["template"]["components"] = [
                         {
@@ -242,6 +256,7 @@ async def send_broadcast(
                         }
                     ]
 
+                # Add body parameters for personalization
                 if body_parameters:
                     body_params = [{"type": "text", "text": recipient_name if body_parameters == "Name" else ""}]
                     if "components" not in data["template"]:
@@ -251,6 +266,8 @@ async def send_broadcast(
                         "parameters": body_params
                     })
 
+                # Send message via WhatsApp API
+                logging.info(f"Sending scheduled template '{template_name}' to {recipient_phone}")
                 response = await client.post(API_url, headers=headers, data=json.dumps(data))
                 response_data = response.json()
 
@@ -259,6 +276,7 @@ async def send_broadcast(
                     wamid = response_data['messages'][0]['id']
                     phone_num = response_data['contacts'][0]["wa_id"]
 
+                    # Log successful message (add to session, commit later)
                     MessageIdLog = Broadcast.BroadcastAnalysis(
                         user_id=user_id,
                         broadcast_id=broadcastId,
@@ -269,11 +287,8 @@ async def send_broadcast(
                         contact_name=recipient_name
                     )
                     db.add(MessageIdLog)
-                    await db.commit()
-                    await db.refresh(MessageIdLog)
 
-
-                    # Save the sent message data in conversations table
+                    # Save conversation record (add to session, commit later)
                     conversation = Conversation(
                         wa_id=recipient_phone,
                         message_id=wamid,
@@ -286,9 +301,6 @@ async def send_broadcast(
                         direction="sent"
                     )
                     db.add(conversation)
-                    await db.commit()
-                    await db.refresh(conversation)
-
 
                 else:
                     failed_count += 1
@@ -296,8 +308,10 @@ async def send_broadcast(
                     error_code = response_data.get("error", {}).get("code", "N/A")
                     error_reason = f"Error Code: {error_code}, Detail: {error_detail}"
                 
+                    logging.error(f"Failed to send to {recipient_phone}: {error_reason}")
                     errors.append({"recipient": recipient_phone, "error": response_data})
                     
+                    # Log failed message (add to session, commit later)
                     MessageIdLog = Broadcast.BroadcastAnalysis(
                         user_id=user_id,
                         broadcast_id=broadcastId,
@@ -307,33 +321,51 @@ async def send_broadcast(
                         error_reason=error_reason
                     )
                     db.add(MessageIdLog)
-                    await db.commit()
-                    await db.refresh(MessageIdLog)
 
+                # RATE LIMITING: Sleep to prevent WhatsApp API throttling
+                # WhatsApp allows ~80 msg/sec, we use 20 msg/sec for safety
+                await asyncio.sleep(0.05)  # 50ms delay = 20 messages/second
+
+        # BATCH COMMIT: Commit all message logs and conversations at once
+        logging.info(f"Committing {success_count + failed_count} message logs to database")
+        await db.commit()
+
+        # Update broadcast status
         broadcastLog = await db.get(Broadcast.BroadcastList, broadcastId)
         if not broadcastLog:
+            logging.error(f"Broadcast not found for ID {broadcastId}")
             raise Exception(f"Broadcast not found for ID {broadcastId}")
 
         broadcastLog.success = success_count
-        broadcastLog.status = "Successful" if success_count > 0 else "Failed"
         broadcastLog.failed = failed_count
+        
+        # Determine final status
+        if failed_count == 0:
+            broadcastLog.status = "Successful"
+        elif success_count > 0:
+            broadcastLog.status = "Partially Successful"
+        else:
+            broadcastLog.status = "Failed"
 
         db.add(broadcastLog)
         await db.commit()
         await db.refresh(broadcastLog)
 
+        # Log results (don't raise exception - task should complete)
         if errors:
-            print(f"Failed to send some messages: {errors}")
-            raise Exception(f"Failed to send broadcast: {errors}")
-
-        print(f"Successfully sent {success_count} messages.")
+            logging.warning(f"Scheduled broadcast {broadcastId} completed with {failed_count} failures: {errors[:3]}")
         
+        logging.info(f"Scheduled broadcast {broadcastId} completed: {success_count} sent, {failed_count} failed")
+        
+    except SkipMessage:
+        # Re-raise SkipMessage for cancelled broadcasts
+        raise
     except Exception as e:
-        await db.rollback()  # Rollback in case of an error
-        print(f"Error in broadcast: {str(e)}")
+        await db.rollback()
+        logging.critical(f"Critical error in scheduled broadcast {broadcastId}: {str(e)}")
         raise e
     finally:
-        await db.close()  # Ensure db is closed
+        await db.close()
 
    
 
@@ -352,6 +384,14 @@ async def send_template_messages_task(
     access_token: str,
     user_id: int,
 ):
+    """
+    Dramatiq actor to send WhatsApp template messages to multiple recipients.
+    
+    OPTIMIZATIONS:
+    - Batch database commits (commit once after all messages)
+    - Rate limiting to prevent WhatsApp API throttling (20 msg/sec)
+    - Better error handling (doesn't fail task if some messages succeed)
+    """
     db = await anext(get_db())
     try:
         success_count = 0
@@ -364,17 +404,20 @@ async def send_template_messages_task(
             "Content-Type": "application/json"
         }
 
+        # Parse template_data once (not in loop)
+        if isinstance(template_data, str):
+            template_data_json = json.loads(template_data)
+        else:
+            template_data_json = template_data
+
+        Templatelanguage = template_data_json.get("language")
+
         async with httpx.AsyncClient() as client:
             for contact in recipients:
                 recipient_name = contact["name"]
                 recipient_phone = contact["phone"]
 
-                if isinstance(template_data, str):
-                    template_data_json = json.loads(template_data)
-
-                Templatelanguage = template_data_json.get("language")
-
-
+                # Build WhatsApp API payload
                 data = {
                     "messaging_product": "whatsapp",
                     "to": recipient_phone,
@@ -385,8 +428,7 @@ async def send_template_messages_task(
                     }
                 }
 
-
-
+                # Add header media if provided
                 if image_id:
                     data["template"]["components"] = [
                         {
@@ -400,6 +442,7 @@ async def send_template_messages_task(
                         }
                     ]
 
+                # Add body parameters for personalization
                 if body_parameters:
                     body_params = [{"type": "text", "text": f"{recipient_name}"}] if body_parameters == "Name" else []
                     if "components" not in data["template"]:
@@ -410,7 +453,8 @@ async def send_template_messages_task(
                         "parameters": body_params
                     })
 
-                print(data)
+                # Send message via WhatsApp API
+                logging.info(f"Sending template '{template}' to {recipient_phone}")
                 response = await client.post(API_url, headers=headers, json=data)
                 response_data = response.json()
 
@@ -419,6 +463,7 @@ async def send_template_messages_task(
                     wamid = response_data['messages'][0]['id']
                     phone_num = response_data['contacts'][0]["wa_id"]
 
+                    # Log successful message (add to session, commit later)
                     message_log = Broadcast.BroadcastAnalysis(
                         user_id=user_id,
                         broadcast_id=broadcast_id,
@@ -429,12 +474,8 @@ async def send_template_messages_task(
                         contact_name=recipient_name,
                     )
                     db.add(message_log)
-                    await db.commit()
-                    await db.refresh(message_log)
 
-                    
-
-                    # Save the sent message data in conversations table
+                    # Save conversation record (add to session, commit later)
                     conversation = Conversation(
                         wa_id=recipient_phone,
                         message_id=wamid,
@@ -447,8 +488,6 @@ async def send_template_messages_task(
                         direction="sent"
                     )
                     db.add(conversation)
-                    await db.commit()
-                    await db.refresh(conversation)
 
                 else:
                     failed_count += 1
@@ -456,45 +495,61 @@ async def send_template_messages_task(
                     error_code = response_data.get("error", {}).get("code", "N/A")
                     error_reason = f"Error Code: {error_code}, Detail: {error_detail}"
 
+                    logging.error(f"Failed to send to {recipient_phone}: {error_reason}")
                     errors.append({"recipient": recipient_phone, "error": response_data})
 
+                    # Log failed message (add to session, commit later)
                     message_log = Broadcast.BroadcastAnalysis(
                         user_id=user_id,
                         broadcast_id=broadcast_id,
                         status="failed",
                         phone_no=recipient_phone,
                         contact_name=recipient_name,
-                        error_reason=error_reason  # Log error details here
+                        error_reason=error_reason
                     )
                     db.add(message_log)
-                    await db.commit()
-                    await db.refresh(message_log)
 
+                # RATE LIMITING: Sleep to prevent WhatsApp API throttling
+                # WhatsApp allows ~80 msg/sec, we use 20 msg/sec for safety
+                await asyncio.sleep(0.05)  # 50ms delay = 20 messages/second
+
+        # BATCH COMMIT: Commit all message logs and conversations at once
+        logging.info(f"Committing {success_count + failed_count} message logs to database")
+        await db.commit()
 
         # Update broadcast status
-        broadcast = await db.get(Broadcast.BroadcastList,broadcast_id)
+        broadcast = await db.get(Broadcast.BroadcastList, broadcast_id)
         if not broadcast:
+            logging.error(f"Broadcast not found for ID {broadcast_id}")
             raise Exception(f"Broadcast not found for ID {broadcast_id}")
+        
         broadcast.success = success_count
-        broadcast.status = "Successful" if failed_count == 0 else "Partially Successful"
         broadcast.failed = failed_count
+        
+        # Determine final status
+        if failed_count == 0:
+            broadcast.status = "Successful"
+        elif success_count > 0:
+            broadcast.status = "Partially Successful"
+        else:
+            broadcast.status = "Failed"
 
         db.add(broadcast)
         await db.commit()
-        await db.refresh(broadcast)           
+        await db.refresh(broadcast)
 
+        # Log results (don't raise exception - task should complete)
         if errors:
-            print(f"Failed to send some messages: {errors}")
-            raise Exception(f"Failed to send broadcast: {errors}")
+            logging.warning(f"Broadcast {broadcast_id} completed with {failed_count} failures: {errors[:3]}")  # Log first 3 errors
         
-        print(f"Successfully sent {success_count} messages.")
+        logging.info(f"Broadcast {broadcast_id} completed: {success_count} sent, {failed_count} failed")
         
     except Exception as e:
-        await db.rollback()  # Rollback in case of an error
-        print(f"Error in broadcast: {str(e)}")
+        await db.rollback()
+        logging.critical(f"Critical error in broadcast {broadcast_id}: {str(e)}")
         raise e
     finally:
-        await db.close()  # Ensure db is closed
+        await db.close()
 
 
 

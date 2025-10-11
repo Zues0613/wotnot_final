@@ -15,7 +15,8 @@ from wati.database import database
 from wati.models import (
     User, 
     BroadcastList, 
-    BroadcastAnalysis, 
+    BroadcastAnalysis,
+    Template,
     Contact, 
     Conversation, 
     Last_Conversation, 

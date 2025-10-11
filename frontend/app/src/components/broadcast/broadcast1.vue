@@ -19,9 +19,42 @@
       </div>
     </div>
 
-    <h3 class="mb-4 text-xl text-gray-600 md:text-2xs"><b>Template List</b><span v-if="cursor"
-        class="inline-block w-5 h-5 ml-5 border-2 border-green-500 rounded-full border-t-transparent animate-spin"></span>
-    </h3>
+    <!-- Tab Navigation -->
+    <div class="flex items-center gap-2 mb-6">
+      <button 
+        @click="activeTab = 'templates'"
+        :class="activeTab === 'templates' 
+          ? 'bg-green-700 text-white shadow-md' 
+          : 'bg-white text-gray-700 border border-gray-300 hover:border-green-500 hover:bg-green-50'"
+        class="px-6 py-2.5 rounded-lg transition-all duration-200 font-medium">
+        <span class="flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          Templates
+          <span v-if="cursor" class="inline-block w-4 h-4 border-2 border-white rounded-full border-t-transparent animate-spin"></span>
+        </span>
+      </button>
+      
+      <button 
+        @click="activeTab = 'recycle'; fetchDeletedTemplates()"
+        :class="activeTab === 'recycle' 
+          ? 'bg-orange-600 text-white shadow-md' 
+          : 'bg-white text-gray-700 border border-gray-300 hover:border-orange-500 hover:bg-orange-50'"
+        class="px-6 py-2.5 rounded-lg transition-all duration-200 font-medium relative">
+        <span class="flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+          </svg>
+          Recycle Bin
+          <span v-if="deletedTemplates.length > 0" class="ml-1 px-2 py-0.5 text-xs font-bold text-orange-600 bg-orange-100 rounded-full border border-orange-300">{{ deletedTemplates.length }}</span>
+        </span>
+      </button>
+    </div>
+
+    <!-- Templates Tab Content -->
+    <div v-show="activeTab === 'templates'">
+      <h3 class="mb-4 text-xl text-gray-600 md:text-2xs"><b>Template List</b></h3>
 
     <!-- Show empty state when no templates -->
     <div v-if="!cursor && templates.length === 0" class="flex flex-col items-center justify-center p-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
@@ -90,8 +123,77 @@
       </table>
     </div>
 
+    </div>
+
+    <!-- Recycle Bin Tab Content -->
+    <div v-show="activeTab === 'recycle'">
+      <h3 class="mb-4 text-xl text-orange-600 md:text-2xs">
+        <b>Recycle Bin</b>
+        <span v-if="recycleBinLoading" class="inline-block w-5 h-5 ml-5 border-2 border-orange-500 rounded-full border-t-transparent animate-spin"></span>
+      </h3>
+
+      <!-- Empty Recycle Bin State -->
+      <div v-if="!recycleBinLoading && deletedTemplates.length === 0" class="flex flex-col items-center justify-center p-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+        <svg class="w-20 h-20 mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+        </svg>
+        <h3 class="text-xl font-semibold text-gray-700 mb-2">Recycle Bin is Empty</h3>
+        <p class="text-gray-500 text-center">Deleted templates will appear here and can be restored</p>
+      </div>
+
+      <!-- Deleted Templates Table -->
+      <div v-if="deletedTemplates.length > 0" class="overflow-x-auto custom-scrollbar max-h-[55vh]">
+        <table class="w-full text-sm bg-white border border-gray-300 rounded-lg md:text-base">
+          <thead>
+            <tr class="font-semibold text-center text-gray-700 bg-gray-100">
+              <th class="sticky top-0 z-10 p-3 text-left bg-gray-100 border border-gray-300 md:p-4">Name</th>
+              <th class="sticky top-0 z-10 p-3 border border-gray-300 bg-gray-100 md:p-4">Category</th>
+              <th class="sticky top-0 z-10 p-3 border border-gray-300 bg-gray-100 md:p-4">Deleted At</th>
+              <th class="sticky top-0 z-10 p-3 border border-gray-300 bg-gray-100 md:p-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="template in deletedTemplates" :key="template.id" class="hover:bg-gray-50">
+              <td class="p-3 text-left border border-gray-200 md:p-4">{{ template.name }}</td>
+              <td class="p-3 text-center border border-gray-200 md:p-4">{{ template.category }}</td>
+              <td class="p-3 text-center border border-gray-200 md:p-4">{{ formatDate(template.deleted_at) }}</td>
+              <td class="p-3 text-center border border-gray-200 md:p-4">
+                <div class="flex justify-center gap-2">
+                  <!-- Restore Button -->
+                  <button 
+                    @click="restoreTemplate(template.name)"
+                    class="px-3 py-1 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 transition-colors"
+                    title="Restore template">
+                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Restore
+                  </button>
+                  
+                  <!-- Permanent Delete Button -->
+                  <button 
+                    @click="showPermanentDeleteConfirm(template.name)"
+                    class="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded hover:bg-red-700 transition-colors"
+                    title="Permanently delete">
+                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                    Delete Forever
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <confirmationPopup v-if="showConfirmPopup" @yes="deleteTemplate(deleteTemplateName)" @no="showConfirmPopup = false"
       @close="showConfirmPopup = false" />
+    
+    <confirmationPopup v-if="showPermanentDeletePopup" @yes="permanentDeleteTemplate(permanentDeleteName)" @no="showPermanentDeletePopup = false"
+      @close="showPermanentDeletePopup = false" 
+      message="⚠️ This will PERMANENTLY delete the template. This action cannot be undone. Are you sure?" />
 
     <PopUp_preview v-if="showPreview" @close="closePreview">
       <div
@@ -344,6 +446,13 @@ export default {
       uploadHandleID: null,
       deleteTemplateName: '', // To store the name of the template to be deleted
       showConfirmPopup: false, // State to control the confirmation popup visibility
+      
+      // Recycle Bin
+      activeTab: 'templates', // 'templates' or 'recycle'
+      deletedTemplates: [],
+      recycleBinLoading: false,
+      showPermanentDeletePopup: false,
+      permanentDeleteName: '',
 
       // loading
       loading: false, // Add loading state
@@ -651,7 +760,7 @@ export default {
         return;
       }
       try {
-        const response = await axios.post(`https://api.wotnot.skylog.in/create-template`, payload, {
+        const response = await axios.post(`${this.apiUrl}/create-template`, payload, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -670,7 +779,41 @@ export default {
           console.error('Error creating template:', response.data.detail);
         }
       } catch (error) {
-        const errorMessage = error.response?.data?.detail?.error?.error_user_msg || error.response?.data?.detail?.error?.message || error.message;
+        console.error('Full error object:', error);
+        console.error('Error response:', error.response);
+        
+        let errorMessage = 'Unknown error occurred';
+        
+        if (error.response) {
+          // Server responded with error status
+          if (error.response.status === 401) {
+            errorMessage = 'Session expired. Please login again.';
+            // Optionally redirect to login
+            setTimeout(() => {
+              this.$router.push('/');
+            }, 2000);
+          } else if (error.response.data?.detail) {
+            // Handle different detail formats
+            if (typeof error.response.data.detail === 'string') {
+              errorMessage = error.response.data.detail;
+            } else if (error.response.data.detail?.error?.error_user_msg) {
+              errorMessage = error.response.data.detail.error.error_user_msg;
+            } else if (error.response.data.detail?.error?.message) {
+              errorMessage = error.response.data.detail.error.message;
+            } else {
+              errorMessage = JSON.stringify(error.response.data.detail);
+            }
+          } else {
+            errorMessage = `Error ${error.response.status}: ${error.response.statusText}`;
+          }
+        } else if (error.request) {
+          // Request made but no response
+          errorMessage = 'No response from server. Please check your connection.';
+        } else {
+          // Other errors
+          errorMessage = error.message;
+        }
+        
         toast.error(`Request failed: ${errorMessage}`);
         console.error('Request failed:', error);
       }
@@ -710,22 +853,147 @@ export default {
           }
         });
 
-        if (response.ok) {
-          toast.success("Template deleted successfully");
-          await this.fetchtemplateList();
+        const responseData = await response.json();
+
+        if (response.ok && responseData.success) {
+          toast.success('Template moved to recycle bin!');
+          await this.fetchtemplateList(); // Refresh template list
+          // Update recycle bin count if we're on that tab
+          if (this.activeTab === 'recycle') {
+            await this.fetchDeletedTemplates();
+          }
         }
         else {
-          const errorData = await response.json();
-          toast.error(`Error: ${errorData.detail}`);
+          const errorMessage = responseData.message || responseData.detail || "Failed to delete template";
+          toast.error(`Error: ${errorMessage}`);
         }
 
       } catch (error) {
-        console.error('Error deleting template:', error.response ? error.response.data : error.message);
+        console.error('Error deleting template:', error);
+        toast.error('Failed to delete template. Please try again.');
       }
       finally {
         this.tableLoading = false;
         this.deleteTemplateName = '';
       }
+    },
+
+    async fetchDeletedTemplates() {
+      const toast = useToast();
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('No token found, skipping recycle bin fetch');
+        return;
+      }
+
+      this.recycleBinLoading = true;
+      try {
+        const response = await fetch(`${this.apiUrl}/template/recycle-bin`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch recycle bin');
+        }
+
+        const data = await response.json();
+        this.deletedTemplates = data.data || [];
+        
+      } catch (error) {
+        console.error('Error fetching recycle bin:', error);
+        toast.error('Failed to load recycle bin');
+        this.deletedTemplates = [];
+      } finally {
+        this.recycleBinLoading = false;
+      }
+    },
+
+    async restoreTemplate(template_name) {
+      const toast = useToast();
+      const token = localStorage.getItem('token');
+      try {
+        this.recycleBinLoading = true;
+        const response = await fetch(`${this.apiUrl}/template/restore/${template_name}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const responseData = await response.json();
+
+        if (response.ok && responseData.success) {
+          toast.success('Template restored successfully!');
+          await this.fetchDeletedTemplates(); // Refresh recycle bin
+          await this.fetchtemplateList(); // Refresh template list
+        }
+        else {
+          const errorMessage = responseData.message || responseData.detail || "Failed to restore template";
+          toast.error(`Error: ${errorMessage}`);
+        }
+
+      } catch (error) {
+        console.error('Error restoring template:', error);
+        toast.error('Failed to restore template. Please try again.');
+      } finally {
+        this.recycleBinLoading = false;
+      }
+    },
+
+    showPermanentDeleteConfirm(template_name) {
+      this.permanentDeleteName = template_name;
+      this.showPermanentDeletePopup = true;
+    },
+
+    async permanentDeleteTemplate(template_name) {
+      this.showPermanentDeletePopup = false;
+      const toast = useToast();
+      const token = localStorage.getItem('token');
+      try {
+        this.recycleBinLoading = true;
+        const response = await fetch(`${this.apiUrl}/template/permanent-delete/${template_name}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const responseData = await response.json();
+
+        if (response.ok && responseData.success) {
+          toast.success('Template permanently deleted!');
+          await this.fetchDeletedTemplates(); // Refresh recycle bin
+        }
+        else {
+          const errorMessage = responseData.message || responseData.detail || "Failed to delete template";
+          toast.error(`Error: ${errorMessage}`);
+        }
+
+      } catch (error) {
+        console.error('Error permanently deleting template:', error);
+        toast.error('Failed to delete template. Please try again.');
+      } finally {
+        this.recycleBinLoading = false;
+        this.permanentDeleteName = '';
+      }
+    },
+
+    formatDate(dateString) {
+      if (!dateString) return 'N/A';
+      const date = new Date(dateString);
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     },
 
     closePopup() {

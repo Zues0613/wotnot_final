@@ -653,130 +653,11 @@ async def send_template_message(
     return {"status": "processing", "broadcast_id": broadcast_list.id}
 
 
-@dramatiq.actor
-async def send_template_messages_task(
-    broadcast_id: int,
-    recipients: list,
-    template: str,
-    template_data:str,
-    image_id: str,
-    body_parameters: str,
-    phone_id: str,
-    access_token: str,
-    user_id: int,
-):
+# NOTE: The send_template_messages_task Dramatiq actor has been moved to wati/services/tasks.py
+# to avoid duplication and ensure proper async database handling.
+# The task is called from this endpoint but executed in the background by the Dramatiq worker.
 
 
-    async with database.get_db() as db:
-        success_count = 0
-        failed_count = 0
-        errors = []
-        
-        API_url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
-
-
-        async with httpx.AsyncClient() as client:
-            for contact in recipients:
-                recipient_name = contact.name
-                recipient_phone = contact.phone
-
-                template_data = json.loads(template_data)
-                Templatelanguage = template_data.get("language")
-
-                data = {
-                    "messaging_product": "whatsapp",
-                    "to": recipient_phone,
-                    "type": "template",
-                    "template": {
-                        "name": template,
-                        "language": {"code": Templatelanguage},
-                    }
-                }
-
-
-                if image_id:
-                    data["template"]["components"] = [
-                        {
-                            "type": "header",
-                            "parameters": [
-                                {
-                                    "type": "image",
-                                    "image": {"id": image_id}
-                                }
-                            ]
-                        }
-                    ]
-
-                if body_parameters:
-                    body_params = [{"type": "text", "text": f"{recipient_name}"}] if body_parameters == "Name" else []
-                    data["template"].setdefault("components", []).append({
-                        "type": "body",
-                        "parameters": body_params
-                    })
-
-                response = await client.post(API_url, headers=headers, json=data)
-                response_data = response.json()
-
-                if response.status_code == 200:
-                    success_count += 1
-                    wamid = response_data['messages'][0]['id']
-                    phone_num = response_data['contacts'][0]["wa_id"]
-
-                    message_log = Broadcast.BroadcastAnalysis(
-                        user_id=user_id,
-                        broadcast_id=broadcast_id,
-                        message_id=wamid,
-                        status="sent",
-                        phone_no=phone_num,
-                        contact_name=recipient_name,
-                    )
-                    db.add(message_log)
-
-                    # Save the sent message data in conversations table
-                    conversation = Conversation(
-                        wa_id=recipient_phone,
-                        message_id=wamid,
-                        phone_number_id=phone_id,
-                        message_content=f"#template_message# {template_data}",
-                        timestamp=datetime.utcnow(),
-                        context_message_id=None,
-                        message_type="text",
-                        direction="sent"
-                    )
-                    db.add(conversation)
-
-                else:
-                    failed_count += 1
-                    errors.append({"recipient": recipient_phone, "error": response_data})
-
-                    message_log = Broadcast.BroadcastAnalysis(
-                        user_id=user_id,
-                        broadcast_id=broadcast_id,
-                        status="failed",
-                        phone_no=recipient_phone,
-                        contact_name=recipient_name,
-                    )
-                    db.add(message_log)
-
-        # Commit all changes in one go after the loop
-        await db.commit()
-
-        # Update broadcast status
-        result = await db.execute(
-            select(Broadcast.BroadcastList).filter(Broadcast.BroadcastList.id == broadcast_id)
-        )
-        broadcast = result.scalars().first()
-        if broadcast:
-            broadcast.success = success_count
-            broadcast.status = "Successful" if failed_count == 0 else "Partially Successful"
-            broadcast.failed = failed_count
-            await db.commit()
-
-        
 
 
 @router.get("/templates")
@@ -1005,40 +886,200 @@ async def import_contacts(file: UploadFile = File(...), db: AsyncSession = Depen
 
 
 @router.get("/template")
-async def get_templates(get_current_user: user.newuser = Depends(get_current_user)):
+async def get_templates(
+    db: AsyncSession = Depends(database.get_db),
+    get_current_user: user.newuser = Depends(get_current_user)
+):
     """
-    Fetches the list of templates from the WhatsApp Business API.
+    Fetches templates from local database.
+    Optionally syncs with WhatsApp API to get latest status updates.
     """
     
-    # Check if WhatsApp Business Account credentials are configured
-    if not get_current_user.PAccessToken or not get_current_user.WABAID:
+    try:
+        # Fetch only non-deleted templates from local database
+        result = await db.execute(
+            select(Broadcast.Template)
+            .filter(
+                Broadcast.Template.user_id == get_current_user.id,
+                Broadcast.Template.is_deleted == False  # Exclude soft-deleted templates
+            )
+            .order_by(desc(Broadcast.Template.created_at))
+        )
+        templates = result.scalars().all()
+        
+        # Convert to list of dictionaries matching WhatsApp API format
+        template_list = []
+        for template in templates:
+            template_dict = {
+                "id": template.template_id,
+                "name": template.name,
+                "category": template.category,
+                "language": template.language,
+                "status": template.status,
+                "components": template.components,
+                "sub_category": template.sub_category
+            }
+            template_list.append(template_dict)
+        
+        logging.info(f"Fetched {len(template_list)} templates from local database")
+        
+        # Try to sync with WhatsApp API to get latest status updates
+        if get_current_user.PAccessToken and get_current_user.WABAID:
+            try:
+                API_URL = f'https://graph.facebook.com/v15.0/{get_current_user.WABAID}/message_templates'
+                headers = {
+                    'Authorization': f'Bearer {get_current_user.PAccessToken}'
+                }
+
+                async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+                    response = await client.get(API_URL, headers=headers)
+                
+                if response.status_code == 200:
+                    whatsapp_data = response.json()
+                    whatsapp_templates = whatsapp_data.get('data', [])
+                    
+                    # Update local DB with latest status from WhatsApp
+                    for wa_template in whatsapp_templates:
+                        local_template = next((t for t in templates if t.name == wa_template.get('name')), None)
+                        if local_template and local_template.status != wa_template.get('status'):
+                            local_template.status = wa_template.get('status')
+                            db.add(local_template)
+                    
+                    await db.commit()
+                    logging.info("Synced template statuses with WhatsApp API")
+                    
+                    # Return merged data
+                    return {
+                        "success": True,
+                        "data": whatsapp_data.get('data', template_list)
+                    }
+            except Exception as api_error:
+                logging.warning(f"WhatsApp API sync failed: {str(api_error)}")
+                # Continue with local templates if API fails
+        
+        # Return local templates
+        return {
+            "success": True,
+            "data": template_list
+        }
+        
+    except Exception as e:
+        logging.error(f"Error fetching templates: {str(e)}")
         return {
             "success": False,
-            "message": "WhatsApp Business Account not configured. Please configure in Profile Settings.",
+            "message": str(e),
             "data": []
         }
     
-    API_URL = f'https://graph.facebook.com/v15.0/{get_current_user.WABAID}/message_templates'
-    headers = {
-        'Authorization': f'Bearer {get_current_user.PAccessToken}'
+
+@router.get("/test-auth")
+async def test_authentication(
+    get_current_user: user.newuser = Depends(get_current_user)
+):
+    """
+    Debug endpoint to test if authentication is working
+    """
+    return {
+        "authenticated": True,
+        "user_id": get_current_user.id,
+        "username": get_current_user.username,
+        "email": get_current_user.email,
+        "has_whatsapp": bool(get_current_user.WABAID and get_current_user.PAccessToken)
     }
 
-    try:
-        # Make an asynchronous HTTP GET request
-        async with httpx.AsyncClient() as client:
-            response = await client.get(API_URL, headers=headers)
-        
-        # Check for errors in the API response
-        if response.status_code != 200:
-            return {
-                "success": False,
-                "message": "Failed to fetch templates from WhatsApp",
-                "data": []
-            }
 
-        data = response.json()
-        return data
+@router.delete("/delete-template/{template_name}")
+async def delete_template(
+    template_name: str,
+    db: AsyncSession = Depends(database.get_db),
+    get_current_user: user.newuser = Depends(get_current_user)
+):
+    """
+    Soft delete a template by name (moves to recycle bin).
+    Template is marked as deleted but not removed from database.
+    """
+    try:
+        # Find template by name and user_id
+        result = await db.execute(
+            select(Broadcast.Template)
+            .filter(
+                Broadcast.Template.name == template_name,
+                Broadcast.Template.user_id == get_current_user.id,
+                Broadcast.Template.is_deleted == False  # Only active templates
+            )
+        )
+        template = result.scalars().first()
+
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+
+        # Soft delete: Mark as deleted
+        template.is_deleted = True
+        template.deleted_at = datetime.utcnow()
+        
+        db.add(template)
+        await db.commit()
+        await db.refresh(template)
+        
+        logging.info(f"Template '{template_name}' moved to recycle bin by user {get_current_user.id}")
+        
+        return {
+            "success": True,
+            "message": f"Template '{template_name}' moved to recycle bin"
+        }
+        
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        logging.error(f"Error deleting template: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting template: {str(e)}")
+
+
+@router.get("/template/recycle-bin")
+async def get_deleted_templates(
+    db: AsyncSession = Depends(database.get_db),
+    get_current_user: user.newuser = Depends(get_current_user)
+):
+    """
+    Fetches deleted templates (recycle bin).
+    """
+    try:
+        # Fetch only deleted templates
+        result = await db.execute(
+            select(Broadcast.Template)
+            .filter(
+                Broadcast.Template.user_id == get_current_user.id,
+                Broadcast.Template.is_deleted == True  # Only deleted templates
+            )
+            .order_by(desc(Broadcast.Template.deleted_at))
+        )
+        templates = result.scalars().all()
+        
+        # Convert to list of dictionaries
+        template_list = []
+        for template in templates:
+            template_dict = {
+                "id": template.id,
+                "template_id": template.template_id,
+                "name": template.name,
+                "category": template.category,
+                "language": template.language,
+                "status": template.status,
+                "components": template.components,
+                "sub_category": template.sub_category,
+                "deleted_at": template.deleted_at.isoformat() if template.deleted_at else None
+            }
+            template_list.append(template_dict)
+        
+        logging.info(f"Fetched {len(template_list)} deleted templates from recycle bin")
+        
+        return {
+            "success": True,
+            "data": template_list
+        }
+
+    except Exception as e:
+        logging.error(f"Error fetching recycle bin: {str(e)}")
         return {
             "success": False,
             "message": str(e),
@@ -1046,6 +1087,93 @@ async def get_templates(get_current_user: user.newuser = Depends(get_current_use
         }
 
 
+@router.post("/template/restore/{template_name}")
+async def restore_template(
+    template_name: str,
+    db: AsyncSession = Depends(database.get_db),
+    get_current_user: user.newuser = Depends(get_current_user)
+):
+    """
+    Restore a template from recycle bin.
+    """
+    try:
+        # Find deleted template by name and user_id
+        result = await db.execute(
+            select(Broadcast.Template)
+            .filter(
+                Broadcast.Template.name == template_name,
+                Broadcast.Template.user_id == get_current_user.id,
+                Broadcast.Template.is_deleted == True  # Only deleted templates
+            )
+        )
+        template = result.scalars().first()
+
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found in recycle bin")
+
+        # Restore: Mark as not deleted
+        template.is_deleted = False
+        template.deleted_at = None
+        
+        db.add(template)
+        await db.commit()
+        await db.refresh(template)
+        
+        logging.info(f"Template '{template_name}' restored by user {get_current_user.id}")
+        
+        return {
+            "success": True,
+            "message": f"Template '{template_name}' restored successfully"
+        }
+        
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logging.error(f"Error restoring template: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error restoring template: {str(e)}")
+
+
+@router.delete("/template/permanent-delete/{template_name}")
+async def permanent_delete_template(
+    template_name: str,
+    db: AsyncSession = Depends(database.get_db),
+    get_current_user: user.newuser = Depends(get_current_user)
+):
+    """
+    Permanently delete a template from recycle bin (cannot be restored).
+    """
+    try:
+        # Find deleted template by name and user_id
+        result = await db.execute(
+            select(Broadcast.Template)
+            .filter(
+                Broadcast.Template.name == template_name,
+                Broadcast.Template.user_id == get_current_user.id,
+                Broadcast.Template.is_deleted == True  # Only deleted templates
+            )
+        )
+        template = result.scalars().first()
+
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found in recycle bin")
+
+        # Permanently delete from database
+        await db.delete(template)
+        await db.commit()
+        
+        logging.info(f"Template '{template_name}' permanently deleted by user {get_current_user.id}")
+        
+        return {
+            "success": True,
+            "message": f"Template '{template_name}' permanently deleted"
+        }
+        
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        await db.rollback()
+        logging.error(f"Error permanently deleting template: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting template: {str(e)}")
 
 
 @router.delete("/broadcasts-delete/{broadcast_id}")
@@ -1123,43 +1251,117 @@ import httpx
 @router.post("/create-template", response_model=broadcast.TemplateResponse)
 async def create_template(
     request: broadcast.TemplateCreate,
-    
+    db: AsyncSession = Depends(database.get_db),
     get_current_user: user.newuser = Depends(get_current_user)
 ):
     '''
     Endpoint to create a new WhatsApp template.
-    This endpoint validates the template data and sends it to the WhatsApp API.
+    
+    Workflow:
+    1. Save template to database FIRST with status "PENDING"
+    2. Send to WhatsApp API for approval (when enabled)
+    3. Update status based on WhatsApp response
     '''
     try:
-        template_data = request.model_dump(mode='json')    # Convert Pydantic model to dictionary
-        broadcast.TemplateCreate.validate_template(template_data)  # Validate template
-        print("HEY")
-        # WhatsApp API URL and headers
-        url = f"https://graph.facebook.com/v21.0/{get_current_user.WABAID}/message_templates"
-        headers = {
-            "Authorization": f"Bearer {get_current_user.PAccessToken}",
-            "Content-Type": "application/json"
-        }
+        template_data = request.model_dump(mode='json')
+        broadcast.TemplateCreate.validate_template(template_data)
+        
+        # STEP 1: Save to database FIRST with status PENDING
+        import uuid
+        temp_template_id = str(uuid.uuid4())  # Temporary ID until WhatsApp assigns one
+        
+        new_template = Broadcast.Template(
+            user_id=get_current_user.id,
+            template_id=temp_template_id,  # Will be updated when WhatsApp API responds
+            name=template_data.get('name'),
+            category=template_data.get('category'),
+            sub_category=template_data.get('sub_category'),
+            language=template_data.get('language'),
+            status='PENDING',  # Always starts as PENDING
+            components=template_data.get('components')
+        )
+        
+        db.add(new_template)
+        await db.commit()
+        await db.refresh(new_template)
+        
+        logging.info(f"Template '{template_data.get('name')}' saved to database with status PENDING (ID: {new_template.id})")
+        
+        # STEP 2: Send to WhatsApp API for approval (if credentials configured)
+        if not get_current_user.PAccessToken or not get_current_user.WABAID:
+            # WhatsApp credentials not configured - skip API call
+            logging.warning(f"WhatsApp credentials not configured for user {get_current_user.id}. Template saved locally only.")
+            return {
+                "id": new_template.template_id,
+                "status": "PENDING",
+                "category": new_template.category,
+                "note": "Template saved. Please configure WhatsApp credentials in Profile Settings to submit for approval."
+            }
+        
+        try:
+            # WhatsApp API URL and headers
+            url = f"https://graph.facebook.com/v21.0/{get_current_user.WABAID}/message_templates"
+            headers = {
+                "Authorization": f"Bearer {get_current_user.PAccessToken}",
+                "Content-Type": "application/json"
+            }
 
-        # Payload construction
-        payload = template_data
-        print(payload)
+            timeout = httpx.Timeout(30.0, connect=30.0)
 
-        timeout = httpx.Timeout(30.0, connect=30.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(url, headers=headers, json=template_data)
+                response_data = response.json()
+                logging.info(f"WhatsApp API response: {response_data}")
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(url, headers=headers, json=payload)
-            response_data = response.json()  # Ensure JSON parsing
-            print(response_data)
+            if response.status_code == 200:
+                # STEP 3: Update template with WhatsApp's response
+                new_template.template_id = response_data.get('id')  # Real WhatsApp template ID
+                new_template.status = response_data.get('status', 'PENDING')  # WhatsApp's status
+                await db.commit()
+                await db.refresh(new_template)
+                logging.info(f"Template submitted to WhatsApp. Status: {response_data.get('status')}")
+                
+                return response_data
+            else:
+                # WhatsApp API returned error - keep template as PENDING in DB
+                error_message = response_data.get('error', {}).get('message', 'Unknown WhatsApp API error')
+                logging.error(f"WhatsApp API error: {error_message}")
+                
+                # Don't raise HTTP exception - return success with warning
+                return {
+                    "id": new_template.template_id,
+                    "status": "PENDING",
+                    "category": new_template.category,
+                    "whatsapp_error": error_message,
+                    "note": "Template saved locally. WhatsApp API error - please check your credentials."
+                }
 
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response_data)
-
-        return response_data  # Return parsed JSON instead of raw response
+        except httpx.RequestError as api_error:
+            # Network error connecting to WhatsApp API
+            logging.error(f"Failed to connect to WhatsApp API: {str(api_error)}")
+            return {
+                "id": new_template.template_id,
+                "status": "PENDING",
+                "category": new_template.category,
+                "note": "Template saved locally. Could not connect to WhatsApp API - will retry later."
+            }
+        except Exception as api_error:
+            # Any other WhatsApp API error
+            logging.error(f"WhatsApp API error: {str(api_error)}")
+            return {
+                "id": new_template.template_id,
+                "status": "PENDING",
+                "category": new_template.category,
+                "note": "Template saved locally. WhatsApp API unavailable - will retry later."
+            }
 
     except HTTPException as e:
         logging.critical(f"HTTP Exception: {e.detail}")
-        raise e  # No need to wrap again
+        raise e
+    except Exception as e:
+        await db.rollback()
+        logging.critical(f"Unexpected error creating template: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating template: {str(e)}")
 from fastapi import Depends, HTTPException, BackgroundTasks, Body
 import aiosmtplib
 from email.message import EmailMessage
@@ -1195,12 +1397,44 @@ async def create_template_and_send(
         ...,
         example={"919999999999": "Tony", "918888888888": "Bruce"}
     ),
+    db: AsyncSession = Depends(database.get_db),
     current_user: user.newuser = Depends(get_current_user),
 ):
+    """
+    Create template and send test messages.
+    
+    Workflow:
+    1. Save template to DB with PENDING status
+    2. Submit to WhatsApp API
+    3. Update template status based on response
+    4. Send test messages in background
+    """
     try:
         template_data = request.model_dump(mode="json")
         broadcast.TemplateCreate.validate_template(template_data)
 
+        # STEP 1: Save to database first with PENDING status
+        import uuid
+        temp_template_id = str(uuid.uuid4())
+        
+        new_template = Broadcast.Template(
+            user_id=current_user.id,
+            template_id=temp_template_id,
+            name=template_data.get('name'),
+            category=template_data.get('category'),
+            sub_category=template_data.get('sub_category'),
+            language=template_data.get('language'),
+            status='PENDING',
+            components=template_data.get('components')
+        )
+        
+        db.add(new_template)
+        await db.commit()
+        await db.refresh(new_template)
+        
+        logging.info(f"Template '{template_data.get('name')}' saved to database with status PENDING")
+
+        # STEP 2: Submit to WhatsApp API
         url = f"https://graph.facebook.com/v21.0/{current_user.WABAID}/message_templates"
         headers = {
             "Authorization": f"Bearer {current_user.PAccessToken}",
@@ -1211,13 +1445,23 @@ async def create_template_and_send(
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(url, headers=headers, json=template_data)
             response_data = response.json()
+            logging.info(f"WhatsApp API response: {response_data}")
 
-        if response.status_code != 200:
+        if response.status_code == 200:
+            # STEP 3: Update template with WhatsApp's real ID and status
+            new_template.template_id = response_data.get('id')
+            new_template.status = response_data.get('status', 'PENDING')
+            await db.commit()
+            await db.refresh(new_template)
+        else:
+            # WhatsApp API failed - keep as PENDING in DB
+            logging.error(f"WhatsApp API error: {response_data}")
             raise HTTPException(
                 status_code=response.status_code,
                 detail=response_data
             )
 
+        # STEP 4: Send test messages in background
         for phone, name in phone_number_dict.items():
             custom_message = template_data['components'][0]['text']
             background_tasks.add_task(
@@ -1227,6 +1471,8 @@ async def create_template_and_send(
                 current_user.WABAID,
                 current_user.PAccessToken
             )
+        
+        logging.info(f"Queued test messages to: {list(phone_number_dict.keys())}")
 
         return {
             **response_data,
@@ -1235,7 +1481,11 @@ async def create_template_and_send(
 
     except HTTPException as e:
         logging.critical(f"HTTP Exception: {e.detail}")
-        raise e                                                                                                                                                                                                                                                                                                                
+        raise e
+    except Exception as e:
+        await db.rollback()
+        logging.critical(f"Unexpected error creating template: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating template: {str(e)}")
 """       
 from pydantic import BaseModel
 class EmailBroadcastRequest(BaseModel):

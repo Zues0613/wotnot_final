@@ -95,10 +95,65 @@ backend/
 
 ---
 
-## ✅ Notes
+## ✅ Prerequisites & Notes
 
-- Ensure **Redis** is running (required for Dramatiq).
-- Use `.env` or environment variables for sensitive configuration (e.g., DB URLs, Redis URI).
+### **Redis is REQUIRED for Background Tasks**
+
+This application uses **Dramatiq** for background task processing (broadcasts, scheduled messages). Dramatiq requires **Redis** to be running.
+
+#### **Install Redis:**
+- **Windows:** Download from [https://redis.io/download](https://redis.io/download) or use [Memurai](https://www.memurai.com/)
+- **macOS:** `brew install redis`
+- **Linux:** `sudo apt-get install redis-server` or `sudo yum install redis`
+
+#### **Start Redis:**
+
+**Option 1: Using the provided startup script (Recommended):**
+```bash
+# From backend directory
+.\start_redis.bat
+```
+
+**Option 2: Manual start:**
+```bash
+# Navigate to Redis folder
+cd %USERPROFILE%\Redis
+redis-server.exe redis.windows.conf
+```
+
+#### **Verify Redis is Running:**
+```bash
+redis-cli ping
+# Should respond: PONG
+```
+
+**Note:** Redis is installed at: `C:\Users\[YourUsername]\Redis\`
+
+### **Important Configuration Notes:**
+
+1. **Redis URL Configuration:**
+   - Default: `redis://localhost:6379`
+   - Configured in: `wati/services/tasks.py` (line 170)
+   - Change if your Redis runs on a different host/port
+
+2. **WhatsApp Business API:**
+   - Templates MUST be approved by WhatsApp before use
+   - Rate limit: ~80 messages/second (implemented at 20 msg/sec for safety)
+   - Templates saved locally even if API disabled for testing
+
+3. **Database:**
+   - Uses PostgreSQL (async SQLAlchemy)
+   - Configure connection in `.env` file
+
+4. **Environment Variables:**
+   - Use `.env` file for sensitive configuration (DB URLs, API keys, Redis URI)
+
+### **Performance Optimizations Applied:**
+
+✅ **Batch Database Commits** - Commits all logs after broadcast completion (not per message)
+✅ **Rate Limiting** - 20 messages/second to prevent WhatsApp throttling
+✅ **Error Resilience** - Broadcasts complete even if some messages fail
+✅ **Async Processing** - Non-blocking broadcast execution via Dramatiq
 
 ---
 
