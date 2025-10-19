@@ -38,7 +38,7 @@
 
 
         <button
-          class="bg-gradient-to-r from-[#075e54] via-[#089678] to-[#075e54] text-white px-6 py-3 rounded-lg shadow-lg font-medium flex items-center justify-center hover:from-[#054d45] hover:via-[#067a62] hover:to-[#054d45] transition-all duration-300"
+          class="w-full bg-[#075e54] text-white py-2 rounded-md hover:bg-[#2d988c] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 font-medium flex items-center justify-center transition-all duration-300"
           type="submit">
           <span v-if="!isLoading">Login</span>
           <div v-else class="flex items-center">
@@ -96,33 +96,35 @@ export default {
       }
     },
     async handleLogin() {
-      this.isLoading = true; // Set loading state
-      fetch(`${this.apiUrl}/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          username: this.username,
-          password: this.password
-        })
-      })
-        .then(response => response.json())
-        .then(data => {
-          if (data.access_token) {
-            // Store the token in localStorage or Vuex (if using Vuex)
-            localStorage.setItem('token', data.access_token);
-            // Redirect to the dashboard
-            console.log()
-            this.$router.push('/dashboard');
-          } else {
-            // Handle login error
-            alert('Invalid Credentials Credentials');
-          }
-        })
-        .catch(error => {
-          console.error('Error:', error);
+      this.isLoading = true;
+      this.errorMessage = '';
+      
+      try {
+        const response = await fetch(`${this.apiUrl}/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            username: this.username,
+            password: this.password
+          })
         });
+
+        const data = await response.json();
+
+        if (data.access_token) {
+          localStorage.setItem('token', data.access_token);
+          this.$router.push('/dashboard');
+        } else {
+          this.errorMessage = data.detail || 'Invalid credentials';
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        this.errorMessage = 'Login failed. Please try again.';
+      } finally {
+        this.isLoading = false;
+      }
     },
     redirectSignup() {
       this.$router.push("/signup");

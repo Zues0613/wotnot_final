@@ -55,15 +55,26 @@
       <div class="mt-4 text-sm text-center">
         <p class="mb-2 text-sm">
           By signing up you agree to the
-          <a href="#" class="text-[#075e54] font-semibold">Terms</a> and
-          <a href="#" class="text-[#075e54] font-semibold">Privacy Policy</a>
+          <router-link to="/terms-of-service" class="text-[#075e54] font-semibold hover:underline">Terms of Service</router-link> and
+          <router-link to="/privacy-policy" class="text-[#075e54] font-semibold hover:underline">Privacy Policy</router-link>
         </p>
       </div>
 
       <button
-        class="w-full bg-[#075e54] text-white py-2 rounded-md hover:bg-[#2d988c] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        @click.prevent="handleSubmit">
-        Get Account
+        class="w-full bg-[#075e54] text-white py-2 rounded-md hover:bg-[#2d988c] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 font-medium flex items-center justify-center transition-all duration-300"
+        @click.prevent="handleSubmit"
+        :disabled="isLoading">
+        <span v-if="!isLoading">Get Account</span>
+        <div v-else class="flex items-center">
+          <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none"
+            viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+            </path>
+          </svg>
+          Creating Account...
+        </div>
       </button>
 
       <p class="mt-4 text-center text-sm">
@@ -84,9 +95,8 @@ export default {
 
   data() {
     return {
-
       apiUrl: process.env.VUE_APP_API_URL,
-      
+      isLoading: false,
       sessionInfoResponse: "",
       sdkResponse: "",
     };
@@ -243,51 +253,55 @@ export default {
       });
     },
 
-    handleSubmit() {
+    async handleSubmit() {
       const toast = useToast();
-      // Get the form data
-      const formData = {
-        username: document.getElementById('username').value,
-        email: document.getElementById('email').value,
-        password: document.getElementById('password').value,
-        WABAID: document.getElementById('WABAID').value,
-        PAccessToken: document.getElementById('PAccessToken').value,
-        Phone_id: document.getElementById('Phone_id').value,
-      };
+      this.isLoading = true;
 
-      // Check for required fields
-      if (!formData.username || !formData.email || !formData.password || !formData.WABAID || !formData.PAccessToken || !formData.Phone_id) {
-        
-        toast.error('Please fill in all required fields.');
-        
-        return;
+      try {
+        // Get the form data
+        const formData = {
+          username: document.getElementById('username').value,
+          email: document.getElementById('email').value,
+          password: document.getElementById('password').value,
+          WABAID: document.getElementById('WABAID').value,
+          PAccessToken: document.getElementById('PAccessToken').value,
+          Phone_id: document.getElementById('Phone_id').value,
+        };
+
+        // Check for required fields
+        if (!formData.username || !formData.email || !formData.password || !formData.WABAID || !formData.PAccessToken || !formData.Phone_id) {
+          toast.error('Please fill in all required fields.');
+          return;
+        }
+
+        // Send a request to your FastAPI endpoint
+        const response = await fetch(`${this.apiUrl}/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          toast.success('Account created successfully!');
+          // Clear the form fields
+          document.querySelectorAll('input').forEach(input => input.value = '');
+          // Redirect to login
+          this.$router.push('/');
+        } else if (data.detail) {
+          toast.error(data.detail);
+        } else {
+          toast.error('Failed to create account. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        toast.error('Network error. Please try again.');
+      } finally {
+        this.isLoading = false;
       }
-
-      // Send a request to your FastAPI endpoint
-      fetch(`${this.apiUrl}/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            // console.log(response)
-            toast.success('Account created successfully!');
-            
-            // Clear the form fields
-            document.querySelectorAll('input').forEach(input => input.value = '');
-          } else if (data.detail) {
-             // Show the error message from the API
-            toast.error(data.detail);
-          } else {
-            toast.error('Failed to create account. Please try again.');
-            
-          }
-        })
-        .catch(error => console.error(error));
     },
     redirectLogin() {
 

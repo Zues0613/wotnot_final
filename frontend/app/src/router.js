@@ -16,6 +16,8 @@ import CostAnalytics from "./components/PurchaseHistory/CostDashboard.vue";
 import Analytics from "./components/analytics/Analytics.vue";
 
 import TermsAndPrivacy from "./views/TermsAndPrivacy.vue";
+import TermsOfService from "./views/TermsOfService.vue";
+import PrivacyPolicy from "./views/PrivacyPolicy.vue";
 import { useToast } from "vue-toastification";
 
 const toast = useToast();
@@ -29,6 +31,16 @@ const routes = [
     path: "/terms-and-privacy",
     component: TermsAndPrivacy,
     name: "TermsAndPrivacy",
+  },
+  {
+    path: "/terms-of-service",
+    component: TermsOfService,
+    name: "TermsOfService",
+  },
+  {
+    path: "/privacy-policy",
+    component: PrivacyPolicy,
+    name: "PrivacyPolicy",
   },
 
   // Protected routes within the dashboard
