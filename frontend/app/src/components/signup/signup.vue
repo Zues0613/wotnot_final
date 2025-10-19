@@ -96,7 +96,7 @@ export default {
     // Initialize the Facebook SDK
     window.fbAsyncInit = () => {
       FB.init({
-        appId: "2621821927998797", // Replace with your App ID
+        appId: process.env.VUE_APP_FACEBOOK_APP_ID || "2621821927998797", // From environment variable
         autoLogAppEvents: true,
         xfbml: true,
         version: "v21.0",
@@ -162,7 +162,7 @@ export default {
       FB.login(
         this.fbLoginCallback,
         {
-          config_id: "951833230236631", // Replace with your configuration ID
+          config_id: process.env.VUE_APP_FACEBOOK_CONFIG_ID || "951833230236631", // From environment variable
           response_type: "code", // Must be 'code' for System User access token
           override_default_response_type: true,
           extras: {
@@ -191,7 +191,7 @@ export default {
     initializeFacebookSDK() {
       window.fbAsyncInit = () => {
         FB.init({
-          appId: '2621821927998797',  // Replace with your actual Facebook app ID
+          appId: process.env.VUE_APP_FACEBOOK_APP_ID || '2621821927998797',  // From environment variable
           cookie: true,
           xfbml: true,
           version: 'v20.0',

@@ -222,6 +222,9 @@ export default {
   async mounted() {
     await this.fetchProfile();
     document.addEventListener("click", this.handleOutsideClick);
+    
+    // Check if we're returning from Facebook OAuth
+    this.handleFacebookCallback();
 
     const checkAndSend = () => {
       if (this.sessionInfoResponse && this.sdkResponse) {
@@ -261,12 +264,19 @@ export default {
 
     // Initialize the Facebook SDK
     window.fbAsyncInit = () => {
-      FB.init({
-        appId: "2621821927998797", // Replace with your App ID
-        autoLogAppEvents: true,
-        xfbml: true,
-        version: "v21.0",
-      });
+      try {
+        FB.init({
+          appId: process.env.VUE_APP_FACEBOOK_APP_ID || "2621821927998797",
+          autoLogAppEvents: false, // Disable auto logging to prevent network errors
+          xfbml: false, // Disable xfbml to prevent additional network calls
+          version: "v21.0",
+          cookie: true,
+          status: false, // Disable status checking
+        });
+        console.log('Facebook SDK initialized successfully');
+      } catch (error) {
+        console.error('Error initializing Facebook SDK:', error);
+      }
     };
 
     // Dynamically load the Facebook SDK
@@ -275,6 +285,17 @@ export default {
     script.async = true;
     script.defer = true;
     script.crossOrigin = "anonymous";
+    
+    // Add error handling for script loading
+    script.onerror = () => {
+      console.error('Failed to load Facebook SDK');
+      alert('Failed to load Facebook SDK. Please check your internet connection and try again.');
+    };
+    
+    script.onload = () => {
+      console.log('Facebook SDK script loaded successfully');
+    };
+    
     document.body.appendChild(script);
 
     // Set up an event listener for messages from Facebook
@@ -314,25 +335,110 @@ export default {
 
   methods: {
     fbLoginCallback(response) {
+      console.log("Facebook login response:", response);
+      
       if (response.authResponse) {
         const code = response.authResponse.code;
         console.log("Auth Response Code:", code);
-        // Handle the code by sending it to your backend server for further processing.
+        
+        // Send the code to backend for processing
+        this.sendCodeToBackend(code);
+      } else if (response.error) {
+        console.error("Facebook login error:", response.error);
+        alert(`Facebook login failed: ${response.error.message}`);
       }
+      
       this.sdkResponse = JSON.stringify(response, null, 2);
     },
 
+    async sendCodeToBackend(code) {
+      try {
+        console.log("Sending code to backend:", code);
+        console.log("Session info response:", this.sessionInfoResponse);
+        console.log("SDK response:", this.sdkResponse);
+        
+        const token = localStorage.getItem("token");
+        const response = await fetch(`${this.apiUrl}/subscribe_customer`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionInfoResponse: this.sessionInfoResponse,
+            sdkResponse: this.sdkResponse,
+          }),
+        });
+
+        console.log("Backend response status:", response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log("Backend response:", data);
+          alert("WhatsApp Business Account connected successfully!");
+          // Refresh the page to show updated status
+          window.location.reload();
+        } else {
+          const errorData = await response.json();
+          console.error("Backend error:", errorData);
+          alert(`Failed to connect WhatsApp: ${errorData.detail || 'Unknown error'}`);
+        }
+      } catch (error) {
+        console.error("Error sending code to backend:", error);
+        alert("Failed to connect to backend server");
+      }
+    },
+
     launchWhatsAppSignup() {
-      FB.login(this.fbLoginCallback, {
-        config_id: "951833230236631", // Replace with your configuration ID
-        response_type: "code", // Must be 'code' for System User access token
-        override_default_response_type: true,
-        extras: {
-          setup: {},
-          featureType: "",
-          sessionInfoVersion: "2",
-        },
-      });
+      // Facebook SDK requires HTTPS, so we'll use the alternative method directly
+      console.log('Using alternative Facebook OAuth method (HTTPS required)');
+      this.launchWhatsAppSignupAlternative();
+    },
+
+    launchWhatsAppSignupAlternative() {
+      // Alternative method using direct URL redirect
+      const appId = process.env.VUE_APP_FACEBOOK_APP_ID || "2621821927998797";
+      const configId = process.env.VUE_APP_FACEBOOK_CONFIG_ID || "951833230236631";
+      const redirectUri = encodeURIComponent(window.location.origin + '/settings');
+      
+      // Use the WhatsApp Business API OAuth endpoint
+      const facebookUrl = `https://www.facebook.com/v21.0/dialog/oauth?` +
+        `client_id=${appId}&` +
+        `redirect_uri=${redirectUri}&` +
+        `response_type=code&` +
+        `scope=whatsapp_business_management,whatsapp_business_messaging&` +
+        `config_id=${configId}&` +
+        `setup[whatsapp_business_management][business_verification][mode]=DEVELOPMENT`;
+      
+      console.log('Redirecting to Facebook WhatsApp Business API:', facebookUrl);
+      window.location.href = facebookUrl;
+    },
+
+    handleFacebookCallback() {
+      // Check if we have a code in the URL (returning from Facebook)
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const error = urlParams.get('error');
+      
+      if (error) {
+        console.error('Facebook OAuth error:', error);
+        alert(`Facebook login failed: ${error}`);
+        return;
+      }
+      
+      if (code) {
+        console.log('Received authorization code from Facebook:', code);
+        // Create a mock response object similar to what FB.login would return
+        const mockResponse = {
+          authResponse: {
+            code: code
+          }
+        };
+        this.fbLoginCallback(mockResponse);
+        
+        // Clean up the URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     },
 
     loadFacebookSDK() {
@@ -352,7 +458,7 @@ export default {
     initializeFacebookSDK() {
       window.fbAsyncInit = () => {
         FB.init({
-          appId: "716723098057954", // Replace with your actual Facebook app ID
+          appId: process.env.VUE_APP_FACEBOOK_APP_ID || "2621821927998797", // From environment variable
           cookie: true,
           xfbml: true,
           version: "v20.0",
