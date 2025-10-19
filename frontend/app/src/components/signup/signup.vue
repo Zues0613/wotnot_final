@@ -1,5 +1,24 @@
 <template>
   <div class="bg-container">
+    <!-- Success Animation Overlay -->
+    <div v-if="showSuccessAnimation" class="success-overlay">
+      <div class="success-animation">
+        <div class="success-icon">
+          <svg class="checkmark" viewBox="0 0 52 52">
+            <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+            <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+          </svg>
+        </div>
+        <h2 class="success-title">Account Created Successfully!</h2>
+        <p class="success-message">Logging you in automatically...</p>
+        <div class="loading-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+    </div>
+
     <div class="max-w-md w-full bg-white p-6 rounded-lg shadow-lg">
       <h2 class="text-2xl sm:text-3xl font-semibold text-center text-gray-800 mb-4">Get started with Wotnot</h2>
 
@@ -97,6 +116,7 @@ export default {
     return {
       apiUrl: process.env.VUE_APP_API_URL,
       isLoading: false,
+      showSuccessAnimation: false,
       sessionInfoResponse: "",
       sdkResponse: "",
     };
@@ -286,11 +306,14 @@ export default {
         const data = await response.json();
 
         if (data.success) {
-          toast.success('Account created successfully!');
-          // Clear the form fields
-          document.querySelectorAll('input').forEach(input => input.value = '');
-          // Redirect to login
-          this.$router.push('/');
+          // Show success animation
+          this.showSuccessAnimation = true;
+          
+          // Wait for animation to complete, then auto-login
+          setTimeout(async () => {
+            await this.autoLogin(formData.email, formData.password);
+          }, 2000);
+          
         } else if (data.detail) {
           toast.error(data.detail);
         } else {
@@ -301,6 +324,45 @@ export default {
         toast.error('Network error. Please try again.');
       } finally {
         this.isLoading = false;
+      }
+    },
+
+    async autoLogin(email, password) {
+      const toast = useToast();
+      
+      try {
+        // Auto-login after successful signup
+        const loginResponse = await fetch(`${this.apiUrl}/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            username: email,
+            password: password
+          })
+        });
+
+        const loginData = await loginResponse.json();
+
+        if (loginData.access_token) {
+          localStorage.setItem('token', loginData.access_token);
+          toast.success('Welcome to WotNot! You are now logged in.');
+          
+          // Redirect to dashboard
+          setTimeout(() => {
+            this.$router.push('/dashboard');
+          }, 1000);
+        } else {
+          // If auto-login fails, redirect to login page
+          toast.info('Account created successfully! Please log in.');
+          this.$router.push('/');
+        }
+      } catch (error) {
+        console.error('Auto-login error:', error);
+        // If auto-login fails, redirect to login page
+        toast.info('Account created successfully! Please log in.');
+        this.$router.push('/');
       }
     },
     redirectLogin() {
@@ -320,13 +382,155 @@ export default {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  /* equivalent to min-h-screen */
-
+  position: relative;
   background-image: url("@/assets/LoginPage.png");
   background-position: center;
-  /* equivalent to bg-gray-100 */
   padding: 0 16px;
-  /* equivalent to px-4 */
+}
+
+/* Success Animation Styles */
+.success-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(7, 94, 84, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.success-animation {
+  text-align: center;
+  color: white;
+  animation: slideUp 0.8s ease-out;
+}
+
+.success-icon {
+  margin-bottom: 30px;
+}
+
+.checkmark {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: block;
+  stroke-width: 2;
+  stroke: #fff;
+  stroke-miterlimit: 10;
+  margin: 0 auto;
+  box-shadow: inset 0px 0px 0px #fff;
+  animation: fill 0.4s ease-in-out 0.4s forwards, scale 0.3s ease-in-out 0.9s both;
+}
+
+.checkmark-circle {
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+  stroke-width: 2;
+  stroke-miterlimit: 10;
+  stroke: #fff;
+  fill: none;
+  animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+.checkmark-check {
+  transform-origin: 50% 50%;
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+}
+
+.success-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 15px;
+  animation: fadeInUp 0.6s ease-out 0.3s both;
+}
+
+.success-message {
+  font-size: 1.1rem;
+  margin-bottom: 30px;
+  opacity: 0.9;
+  animation: fadeInUp 0.6s ease-out 0.5s both;
+}
+
+.loading-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  animation: fadeInUp 0.6s ease-out 0.7s both;
+}
+
+.loading-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: white;
+  animation: bounce 1.4s ease-in-out infinite both;
+}
+
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+/* Keyframe Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes stroke {
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes scale {
+  0%, 100% {
+    transform: none;
+  }
+  50% {
+    transform: scale3d(1.1, 1.1, 1);
+  }
+}
+
+@keyframes fill {
+  100% {
+    box-shadow: inset 0px 0px 0px 30px #fff;
+  }
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
 }
 
 /* Responsive padding for different screen sizes */

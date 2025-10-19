@@ -61,14 +61,14 @@
           <p class="mb-2 text-sm">
             By signing up you agree to the
             <router-link
-              to="/terms-and-privacy#terms-and-conditions"
-              class="text-[#075e54] font-semibold"
-              >Terms</router-link
+              to="/terms-of-service"
+              class="text-[#075e54] font-semibold hover:underline"
+              >Terms of Service</router-link
             >
             and
             <router-link
-              to="/terms-and-privacy#privacy-policy"
-              class="text-[#075e54] font-semibold"
+              to="/privacy-policy"
+              class="text-[#075e54] font-semibold hover:underline"
               >Privacy Policy</router-link
             >
           </p>

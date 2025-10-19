@@ -1,15 +1,23 @@
 <template>
   <div class="page-container">
     <header class="header">
-      <router-link to="/" class="logo-link">
-        <div class="logo-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="30" height="30">
-            <path fill="#075e54"
-              d="M160 368c26.5 0 48 21.5 48 48l0 16 72.5-54.4c8.3-6.2 18.4-9.6 28.8-9.6L448 368c8.8 0 16-7.2 16-16l0-288c0-8.8-7.2-16-16-16L64 48c-8.8 0-16 7.2-16 16l0 288c0 8.8 7.2 16 16 16l96 0zm48 124l-.2 .2-5.1 3.8-17.1 12.8c-4.8 3.6-11.3 4.2-16.8 1.5s-8.8-8.2-8.8-14.3l0-21.3 0-6.4 0-.3 0-4 0-48-48 0-48 0c-35.3 0-64-28.7-64-64L0 64C0 28.7 28.7 0 64 0L448 0c35.3 0 64 28.7 64 64l0 288c0 35.3-28.7 64-64 64l-138.7 0L208 492z" />
-          </svg>
-        </div>
-        <span class="logo-text">WotNot</span>
-      </router-link>
+      <div class="header-content">
+        <router-link to="/" class="logo-link">
+          <div class="logo-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="32" height="32">
+              <path fill="#075e54"
+                d="M160 368c26.5 0 48 21.5 48 48l0 16 72.5-54.4c8.3-6.2 18.4-9.6 28.8-9.6L448 368c8.8 0 16-7.2 16-16l0-288c0-8.8-7.2-16-16-16L64 48c-8.8 0-16 7.2-16 16l0 288c0 8.8 7.2 16 16 16l96 0zm48 124l-.2 .2-5.1 3.8-17.1 12.8c-4.8 3.6-11.3 4.2-16.8 1.5s-8.8-8.2-8.8-14.3l0-21.3 0-6.4 0-.3 0-4 0-48-48 0-48 0c-35.3 0-64-28.7-64-64L0 64C0 28.7 28.7 0 64 0L448 0c35.3 0 64 28.7 64 64l0 288c0 35.3-28.7 64-64 64l-138.7 0L208 492z" />
+            </svg>
+          </div>
+          <span class="logo-text">WotNot</span>
+        </router-link>
+        
+        <!-- Quick Navigation -->
+        <nav class="header-nav">
+          <router-link to="/terms-of-service" class="nav-link">Terms of Service</router-link>
+          <router-link to="/" class="nav-link primary">Back to Login</router-link>
+        </nav>
+      </div>
     </header>
 
     <main class="content-wrapper">
@@ -27,18 +35,44 @@
         <section class="section-content">
           <h2>2. Information We Collect</h2>
           
-          <h3>Personal Information:</h3>
-          <p>
-            When you register for an account or interact with our Service, we may collect personally identifiable information, such as:
-          </p>
-          <ul>
-            <li>Email address</li>
-            <li>Business name</li>
-            <li>Password (stored securely as a hash)</li>
-            <li>WhatsApp Business Account ID (WABA ID)</li>
-            <li>Phone Number ID</li>
-            <li>Permanent Access Token (encrypted and stored securely)</li>
-          </ul>
+          <div class="data-categories">
+            <div class="data-category">
+              <div class="category-icon">👤</div>
+              <h3>Account Information</h3>
+              <p>When you register for an account, we collect:</p>
+              <ul>
+                <li>Email address</li>
+                <li>Business name</li>
+                <li>Password (stored securely as a hash)</li>
+                <li>Contact preferences</li>
+              </ul>
+            </div>
+
+            <div class="data-category">
+              <div class="category-icon">📱</div>
+              <h3>WhatsApp Business Data</h3>
+              <p>To provide our services, we collect:</p>
+              <ul>
+                <li>WhatsApp Business Account ID (WABA ID)</li>
+                <li>Phone Number ID</li>
+                <li>Permanent Access Token (encrypted and stored securely)</li>
+                <li>Message templates and content</li>
+                <li>Customer phone numbers (for messaging)</li>
+              </ul>
+            </div>
+
+            <div class="data-category">
+              <div class="category-icon">📊</div>
+              <h3>Usage Analytics</h3>
+              <p>We automatically collect:</p>
+              <ul>
+                <li>Message delivery status and metrics</li>
+                <li>Customer interaction data</li>
+                <li>Platform usage statistics</li>
+                <li>Error logs and performance data</li>
+              </ul>
+            </div>
+          </div>
 
           <h3>Usage Data:</h3>
           <p>
@@ -223,12 +257,17 @@ export default {
 .header {
   padding: 20px 40px;
   border-bottom: 1px solid var(--border-color);
+  background-color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  background-color: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  flex-shrink: 0;
+  justify-content: space-between;
 }
 
 .logo-link {
@@ -236,16 +275,51 @@ export default {
   align-items: center;
   text-decoration: none;
   color: var(--dark-text);
+  transition: transform 0.2s ease;
+}
+
+.logo-link:hover {
+  transform: scale(1.02);
 }
 
 .logo-icon {
-  margin-right: 10px;
+  margin-right: 12px;
 }
 
 .logo-text {
   font-weight: 700;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   color: var(--primary-green);
+}
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: var(--dark-text);
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+  background-color: var(--light-grey-background);
+  color: var(--primary-green);
+}
+
+.nav-link.primary {
+  background-color: var(--primary-green);
+  color: white;
+}
+
+.nav-link.primary:hover {
+  background-color: #2f855a;
+  transform: translateY(-1px);
 }
 
 .content-wrapper {
@@ -475,5 +549,70 @@ a:hover {
   li {
     font-size: 0.95rem;
   }
+}
+
+/* Data Categories */
+.data-categories {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  margin: 30px 0;
+}
+
+.data-category {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #0ea5e9;
+  border-radius: 12px;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.data-category::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0ea5e9, #0284c7);
+}
+
+.data-category:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(14, 165, 233, 0.15);
+}
+
+.category-icon {
+  font-size: 2.5rem;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.data-category h3 {
+  color: #0284c7;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  font-size: 1.2rem;
+  text-align: center;
+}
+
+.data-category p {
+  margin: 0 0 16px 0;
+  color: #0369a1;
+  font-weight: 500;
+  text-align: center;
+}
+
+.data-category ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.data-category li {
+  color: #0c4a6e;
+  margin-bottom: 8px;
+  font-size: 0.95rem;
 }
 </style>
