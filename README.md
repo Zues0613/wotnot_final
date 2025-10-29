@@ -1,10 +1,10 @@
 # WotNot: The AI-Powered WhatsApp Marketing Automation Platform 🚀
 
-**Author**: [Darshitha Marapareddy](https://github.com/Darshitha-03)
+**Authors**: [Darshitha Marapareddy](https://github.com/Darshitha-03) & **Vishal D**
 
-WotNot is a full-featured platform designed to revolutionize WhatsApp marketing through intelligent automation and AI-powered content creation. It empowers businesses to connect with their customers on a massive scale, moving beyond simple bulk messaging to create truly engaging experiences.  
+WotNot is a comprehensive, production-ready WhatsApp marketing automation platform that revolutionizes business communication through intelligent automation and AI-powered content creation. It empowers businesses to connect with their customers at scale, moving beyond simple bulk messaging to create truly engaging, personalized experiences.
 
-With a sleek, fully responsive interface and powerful analytics, **WotNot is the ultimate tool for modern marketing.**
+With a modern Vue.js frontend, robust FastAPI backend, and advanced AI integration, **WotNot is the ultimate solution for modern WhatsApp marketing automation.**
 
 ---
 
@@ -12,11 +12,15 @@ With a sleek, fully responsive interface and powerful analytics, **WotNot is the
 - [Why WotNot?](#-why-wotnot)
 - [Key Features](#-key-features)
 - [Technology Stack](#-technology-stack)
+- [Project Status](#-project-status)
 - [Getting Started](#-getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Usage](#usage)
-- [About the Creator](#-about-the-creator)
+- [API Documentation](#-api-documentation)
+- [Deployment](#-deployment)
+- [Contributing](#-contributing)
+- [About the Authors](#-about-the-authors)
 - [License](#-license)
 
 ---
@@ -37,22 +41,91 @@ WotNot transforms your WhatsApp into a dynamic tool for marketing and customer e
 ---
 
 ## ✨ Key Features
-- 🤖 **Gemini-Powered Template Writer** – Instantly generate creative and effective marketing copy.  
-- 📱 **Fully Responsive Interface** – Beautifully designed, mobile-friendly, and intuitive.  
-- 📈 **Comprehensive Analytics** – Crystal-clear insights into campaign performance.  
-- 🔒 **Secure Authentication** – Built with FastAPI for robust login and signup security.  
-- 💬 **Integrated AI Assistant** – A ChatGPT-like assistant to guide you within the app.  
-- 📦 **Bulk & Scheduled Messaging** – Effortlessly send messages to thousands or schedule them for the best time.  
+
+### 🤖 AI-Powered Content Generation
+- **Google Gemini AI Integration** – Generate compelling message templates instantly
+- **OpenAI (OpenRouter) Support** – Advanced AI capabilities for content creation
+- **AI Assistant** – ChatGPT-like interface for real-time assistance
+- **Customizable Tone & Length** – Tailor messages to your brand voice
+
+### 📱 WhatsApp Business Integration
+- **Template Management** – Create, submit, and manage WhatsApp message templates
+- **Bulk Messaging** – Send messages to thousands of contacts with rate limiting
+- **Scheduled Broadcasting** – Plan and automate message campaigns
+- **Real-time Chat** – Live WhatsApp conversation management
+- **Media Support** – Upload and share images, documents, and media
+
+### 📊 Advanced Analytics & Reporting
+- **Delivery Tracking** – Monitor sent, delivered, read, and replied status
+- **Performance Analytics** – Detailed insights into campaign effectiveness
+- **Cost Analytics** – Track spending and ROI with visual dashboards
+- **Error Reporting** – Comprehensive error tracking and resolution
+
+### 🔗 E-commerce Integration
+- **WooCommerce Integration** – Automated order confirmations and notifications
+- **Product-based Messaging** – Targeted campaigns based on product purchases
+- **Webhook Support** – Real-time event processing
+- **Store Management** – Connect and manage multiple WooCommerce stores
+
+### 👥 Contact Management
+- **Bulk Import/Export** – CSV-based contact management
+- **Tag System** – Organize contacts with custom tags
+- **Duplicate Detection** – Smart contact deduplication
+- **Search & Filter** – Advanced contact filtering capabilities
+
+### 🔒 Security & Authentication
+- **JWT Authentication** – Secure token-based authentication
+- **OAuth2 Integration** – WhatsApp Business API integration
+- **API Key Management** – Secure API access for integrations
+- **Data Protection** – Comprehensive security measures  
 
 ---
 
 ## 🛠️ Technology Stack
-WotNot is built on a modern, scalable, and reliable stack:
 
-- **Backend**: [FastAPI](https://fastapi.tiangolo.com/) – High-performance, asynchronous Python APIs  
-- **Frontend**: [Vue.js 3](https://vuejs.org/) – Reactive, component-based UI  
-- **Database**: PostgreSQL (recommended)  
-- **AI Integration**: Google Gemini API  
+### Backend
+- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.12.3) – High-performance, asynchronous APIs
+- **Database**: PostgreSQL with SQLAlchemy (Async) – Robust data persistence
+- **Task Queue**: Dramatiq with Redis – Background job processing
+- **Authentication**: JWT tokens with OAuth2 – Secure user management
+- **AI Integration**: Google Gemini API + OpenAI (OpenRouter) – Advanced AI capabilities
+- **Background Processing**: APScheduler – Scheduled task management
+
+### Frontend
+- **Framework**: [Vue.js 3](https://vuejs.org/) – Modern reactive UI framework
+- **UI Library**: Element Plus + Tailwind CSS – Beautiful, responsive components
+- **State Management**: Vuex (implicit) – Application state management
+- **HTTP Client**: Axios – API communication
+- **Charts**: Chart.js with Vue-Chart-3 – Data visualization
+
+### Infrastructure
+- **Database**: PostgreSQL – Primary data storage
+- **Cache/Queue**: Redis – Caching and message queuing
+- **File Storage**: Local + WhatsApp Media API – Media management
+- **Deployment**: Heroku-ready (Procfile included) – Easy deployment  
+
+---
+
+## 📊 Project Status
+
+**Current Status**: ✅ **PRODUCTION READY**
+
+WotNot is a fully functional, production-ready WhatsApp marketing automation platform with comprehensive features:
+
+- ✅ **Complete Feature Set** - All core functionality implemented and working
+- ✅ **Modern Architecture** - Built with current best practices and technologies  
+- ✅ **Scalable Design** - Handles growing user bases and message volumes
+- ✅ **AI Integration** - Advanced AI capabilities for content generation
+- ✅ **Real-time Features** - Live chat, analytics, and message tracking
+- ✅ **E-commerce Ready** - WooCommerce integration for automated workflows
+
+### Recent Updates
+- Enhanced AI integration with multiple providers
+- Improved real-time chat functionality
+- Advanced analytics and reporting
+- WooCommerce automation features
+- Comprehensive error handling and logging
+- Performance optimizations
 
 ---
 
@@ -61,26 +134,44 @@ WotNot is built on a modern, scalable, and reliable stack:
 Follow these steps to run WotNot locally.
 
 ### Prerequisites
-- Python **3.8+**  
+- Python **3.12.3** (recommended)
 - Node.js **v16+** and npm/yarn  
-- PostgreSQL  
+- PostgreSQL database
+- Redis server
+- WhatsApp Business API credentials
 - .env File at /backend containing secrets
-```
-DATABASE_URL=
-TURNSTILE_SECRET_KEY=
-YOUR_KEY_ID=
-YOUR_KEY_SECRET=
-GEMINI_API_KEY =
+
+### Environment Variables
+Create a `.env` file in the `/backend` directory with the following variables:
+
+```env
+# Database
+DATABASE_URL=postgresql://username:password@localhost:5432/wotnot_db
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# AI Integration
+GEMINI_API_KEY=your_gemini_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+
+# WhatsApp Business API
+FACEBOOK_APP_ID=your_facebook_app_id
+FACEBOOK_APP_SECRET=your_facebook_app_secret
+REDIRECT_URI=http://localhost:8081/broadcast/broadcast2
+
+# Optional
+TURNSTILE_SECRET_KEY=your_turnstile_key
 ```
 ### Installation
 
-#### Clone the repository
+#### 1. Clone the repository
 ```bash
 git clone https://github.com/Darshitha-03/wotnot.git
 cd wotnot
-````
+```
 
-#### Backend Setup (FastAPI)
+#### 2. Backend Setup (FastAPI)
 
 ```bash
 # Navigate to backend
@@ -93,15 +184,25 @@ source venv/bin/activate   # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run server
-uvicorn main:app --reload
+# Run database migrations
+python migrate_db.py --action create
+
+# Start Redis (required for background tasks)
+# On Windows: Use the provided start_redis.bat
+# On Linux/Mac: redis-server
+
+# Run the FastAPI server
+uvicorn wati.main:app --reload --port 8000
+
+# In a separate terminal, start the Dramatiq worker
+dramatiq wati.services.tasks
 ```
 
-#### Frontend Setup (Vue.js)
+#### 3. Frontend Setup (Vue.js)
 
 ```bash
-# Navigate to frontend
-cd frontend
+# Navigate to frontend/app
+cd frontend/app
 
 # Install dependencies
 npm install
@@ -114,19 +215,97 @@ npm run serve
 
 ## ▶️ Usage
 
-1. Start the **backend** server (FastAPI).
-2. Start the **frontend** (Vue.js).
-3. Open the app in your browser (default: `http://localhost:8080`).
-4. Sign up / log in, connect your WhatsApp, and start building automated campaigns.
+1. **Start the backend server** (FastAPI) on `http://localhost:8000`
+2. **Start the frontend** (Vue.js) on `http://localhost:8080`
+3. **Start Redis** for background task processing
+4. **Start Dramatiq worker** for message queuing
+5. Open the app in your browser and sign up/log in
+6. Connect your WhatsApp Business Account
+7. Start creating templates and sending automated campaigns!
+
+### Quick Start Guide
+1. **Register** a new account
+2. **Connect WhatsApp** using OAuth2 flow
+3. **Create templates** using AI-powered generator
+4. **Import contacts** via CSV or manual entry
+5. **Send broadcasts** immediately or schedule them
+6. **Monitor analytics** and track performance
 
 ---
 
-## 👩‍💻 About the Creator
+## 📚 API Documentation
 
-Built with ❤️ by **Darshitha Marapareddy**.
-A passionate developer focused on building **AI-powered automation tools** that simplify workflows and maximize impact.
+WotNot provides a comprehensive REST API built with FastAPI:
 
-🔗 [GitHub Profile](https://github.com/Darshitha-03)
+- **Interactive API Docs**: `http://localhost:8000/docs` (Swagger UI)
+- **Alternative Docs**: `http://localhost:8000/redoc` (ReDoc)
+- **OpenAPI Schema**: `http://localhost:8000/openapi.json`
+
+### Key API Endpoints
+- **Authentication**: `/login`, `/register`, `/subscribe_customer`
+- **Broadcasting**: `/send-template-message/`, `/broadcast`
+- **Templates**: `/template`, `/create-template`
+- **Contacts**: `/contacts/`, `/contacts/bulk_import/`
+- **Analytics**: `/get-analytics`, `/broadcast-report/{id}`
+- **Integration**: `/test-woocommerce`, `/woo_products`
+
+---
+
+## 🚀 Deployment
+
+### Heroku Deployment (Recommended)
+```bash
+# Backend deployment
+git subtree push --prefix=backend heroku main
+
+# Frontend deployment (static hosting)
+cd frontend/app
+npm run build
+# Deploy the 'dist' folder to any static host
+```
+
+### Docker Deployment
+```bash
+# Build and run with Docker Compose
+docker-compose up -d
+```
+
+### Environment Setup
+- Set up PostgreSQL database
+- Configure Redis instance
+- Set all required environment variables
+- Configure WhatsApp Business API webhooks
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please follow these steps:
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
+
+### Development Guidelines
+- Follow PEP 8 for Python code
+- Use TypeScript for frontend components
+- Write tests for new features
+- Update documentation as needed
+
+---
+
+## 👥 About the Authors
+
+Built with ❤️ by **Darshitha Marapareddy** and **Vishal D**.
+
+**Darshitha Marapareddy** - A passionate developer focused on building **AI-powered automation tools** that simplify workflows and maximize impact.
+
+**Vishal D** - A dedicated Full-Stack Developer, AI & Cloud Enthusiast, and CSE Student with expertise in scalable systems and modern web technologies.
+
+🔗 [Darshitha's GitHub Profile](https://github.com/Darshitha-03)  
+🔗 [Vishal's GitHub Profile](https://github.com/zues0613)
 
 ---
 
@@ -137,4 +316,27 @@ Feel free to fork, modify, and distribute with attribution.
 
 ---
 
-🚀 **WotNot** – Elevating WhatsApp Marketing with AI and Automation.
+## 🎉 Project Highlights
+
+WotNot represents a significant achievement in WhatsApp marketing automation:
+
+- **🏆 Production Ready** - Fully functional platform ready for real-world deployment
+- **🤖 AI-Powered** - Advanced AI integration for intelligent content generation
+- **📊 Data-Driven** - Comprehensive analytics and reporting capabilities
+- **🔗 E-commerce Ready** - Seamless integration with WooCommerce and other platforms
+- **⚡ High Performance** - Optimized for speed and scalability
+- **🔒 Enterprise Security** - Robust authentication and data protection
+
+## 📈 What's Next
+
+- **Multi-tenancy Support** - Support for multiple organizations
+- **Mobile App** - Native mobile application development
+- **Advanced AI** - Machine learning for message optimization
+- **More Integrations** - Shopify, Magento, and other e-commerce platforms
+- **API Marketplace** - Third-party integration ecosystem
+
+---
+
+🚀 **WotNot** – The Future of WhatsApp Marketing Automation is Here!
+
+*Built with modern technologies, powered by AI, and designed for scale.*
