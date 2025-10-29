@@ -187,15 +187,27 @@ pip install -r requirements.txt
 # Run database migrations
 python migrate_db.py --action create
 
+# 🚀 Start ALL services with one command (Recommended)
+python start_all.py
+
+# OR start services individually:
 # Start Redis (required for background tasks)
-# On Windows: Use the provided start_redis.bat
-# On Linux/Mac: redis-server
+python start_redis.py
 
-# Run the FastAPI server
-uvicorn wati.main:app --reload --port 8000
+# In a separate terminal, start Dramatiq worker
+python start_dramatiq.py
 
-# In a separate terminal, start the Dramatiq worker
-dramatiq wati.services.tasks
+# In another terminal, start FastAPI server
+python start_backend.py
+```
+
+**🎯 Quick Start (One Command):**
+```bash
+# This starts Redis, Dramatiq, and FastAPI automatically
+python start_all.py
+
+# On Windows, you can also use:
+start_all.bat
 ```
 
 #### 3. Frontend Setup (Vue.js)
@@ -215,13 +227,28 @@ npm run serve
 
 ## ▶️ Usage
 
-1. **Start the backend server** (FastAPI) on `http://localhost:8000`
+### Quick Start (Recommended)
+1. **Start all backend services** with one command:
+   ```bash
+   cd backend
+   python start_all.py
+   ```
+   This automatically starts Redis, Dramatiq worker, and FastAPI server.
+
 2. **Start the frontend** (Vue.js) on `http://localhost:8080`
-3. **Start Redis** for background task processing
-4. **Start Dramatiq worker** for message queuing
-5. Open the app in your browser and sign up/log in
-6. Connect your WhatsApp Business Account
-7. Start creating templates and sending automated campaigns!
+
+3. **Open the app** in your browser and sign up/log in
+
+4. **Connect your WhatsApp Business Account**
+
+5. **Start creating templates and sending automated campaigns!**
+
+### Manual Start (Alternative)
+If you prefer to start services individually:
+1. Start Redis: `python start_redis.py`
+2. Start Dramatiq: `python start_dramatiq.py` 
+3. Start Backend: `python start_backend.py`
+4. Start Frontend: `npm run serve`
 
 ### Quick Start Guide
 1. **Register** a new account
