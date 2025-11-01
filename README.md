@@ -1,6 +1,6 @@
 # WotNot: The AI-Powered WhatsApp Marketing Automation Platform 🚀
 
-**Authors**: [Darshitha Marapareddy](https://github.com/Darshitha-03) & **Vishal D**
+**Authors**: [Darshitha Marapareddy](https://github.com/Darshitha-03) & [**Vishal D**](https://github.com/zues0613)
 
 WotNot is a comprehensive, production-ready WhatsApp marketing automation platform that revolutionizes business communication through intelligent automation and AI-powered content creation. It empowers businesses to connect with their customers at scale, moving beyond simple bulk messaging to create truly engaging, personalized experiences.
 
