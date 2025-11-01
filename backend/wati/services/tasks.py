@@ -167,8 +167,47 @@ async def get_task_status(task_id: int, db: AsyncSession):
 
 # Add the middleware to your Dramatiq broker
 from dramatiq.brokers.redis import RedisBroker
+import os
+from urllib.parse import urlparse
 
-redis_broker = RedisBroker(url="redis://localhost:6379")
+def get_redis_url():
+    """
+    Get Redis URL from environment variables.
+    Supports both Upstash REST credentials and standard Redis URL.
+    """
+    # Check if Upstash REST credentials are provided
+    upstash_rest_url = os.getenv('UPSTASH_REDIS_REST_URL')
+    upstash_rest_token = os.getenv('UPSTASH_REDIS_REST_TOKEN')
+    
+    if upstash_rest_url and upstash_rest_token:
+        # Construct Redis URL from Upstash REST credentials
+        # Extract host from REST URL (e.g., https://fast-bluejay-19956.upstash.io -> fast-bluejay-19956.upstash.io)
+        parsed_url = urlparse(upstash_rest_url)
+        host = parsed_url.netloc or parsed_url.path.replace('https://', '').replace('http://', '')
+        
+        # Remove trailing slash if present
+        host = host.rstrip('/')
+        
+        # Construct Redis URL: rediss://default:TOKEN@HOST:6379
+        # For Upstash, the REST token is used as the password for Redis protocol
+        # Note: rediss:// indicates SSL/TLS connection (Upstash requires this)
+        redis_url = f"rediss://default:{upstash_rest_token}@{host}:6379"
+        print(f"✅ Using Upstash Redis: {host}")
+        return redis_url
+    
+    # Fall back to standard REDIS_URL if Upstash credentials not provided
+    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+    if redis_url == 'redis://localhost:6379':
+        print("⚠️ Using default Redis URL (localhost:6379)")
+    else:
+        print(f"✅ Using Redis URL from REDIS_URL environment variable")
+    return redis_url
+
+# Get Redis URL (supports Upstash REST credentials)
+redis_url = get_redis_url()
+
+# Create Redis broker
+redis_broker = RedisBroker(url=redis_url)
 
 redis_broker.add_middleware(AsyncIO()) 
 # redis_broker.add_middleware(cancelation_middleware)
