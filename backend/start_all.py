@@ -2,6 +2,19 @@
 """
 WotNot Backend - Complete Startup Script
 Starts all required services: Redis, Dramatiq Worker, and FastAPI Backend
+
+This script automatically detects the deployment environment based on ENVIRONMENT variable:
+- Development (ENVIRONMENT=dev): Uses local Redis installation
+- Production (ENVIRONMENT=prod or unset): Uses Upstash Redis if credentials are provided
+
+Required Environment Variables for Production:
+- ENVIRONMENT: Set to "prod" or leave unset (defaults to prod)
+- UPSTASH_REDIS_REST_URL: Upstash Redis REST API URL
+- UPSTASH_REDIS_REST_TOKEN: Upstash Redis REST Token
+- PORT: Server port (set by Render automatically, defaults to 8000)
+
+Environment Variables for Development:
+- ENVIRONMENT: Set to "dev" to force local Redis usage
 """
 
 import subprocess
@@ -75,16 +88,33 @@ def check_redis_running():
 
 def check_cloud_redis():
     """Check if cloud Redis (Upstash) is configured"""
+    # Check environment variable
+    environment = os.getenv("ENVIRONMENT", "prod").lower()
+    env_raw = os.getenv("ENVIRONMENT", "NOT_SET")
+    print(f"🔍 Environment: '{env_raw}' (normalized: '{environment}')")
+    
+    # In development mode, always use local Redis
+    if environment == "dev":
+        print("ℹ️  Development mode: Will use local Redis")
+        return False
+    
+    # In production mode, check for cloud Redis
     upstash_rest_url = os.getenv('UPSTASH_REDIS_REST_URL')
     upstash_rest_token = os.getenv('UPSTASH_REDIS_REST_TOKEN')
     redis_url = os.getenv('REDIS_URL')
+    
+    # Debug: Print what we found
+    print(f"🔍 Checking for cloud Redis...")
+    print(f"   UPSTASH_REDIS_REST_URL: {'✅ Found' if upstash_rest_url else '❌ Not set'}")
+    print(f"   UPSTASH_REDIS_REST_TOKEN: {'✅ Found' if upstash_rest_token else '❌ Not set'}")
+    print(f"   REDIS_URL: {'✅ Found' if redis_url else '❌ Not set'}")
     
     if upstash_rest_url and upstash_rest_token:
         print(f"✅ Upstash Redis configured: {upstash_rest_url[:30]}...")
         print("🔗 Using cloud Redis (no local installation needed)")
         return True
     elif redis_url and not redis_url.startswith('redis://localhost') and not redis_url.startswith('redis://127.0.0.1'):
-        print(f"✅ Cloud Redis URL configured")
+        print(f"✅ Cloud Redis URL configured: {redis_url[:50]}...")
         print("🔗 Using cloud Redis (no local installation needed)")
         return True
     
@@ -117,6 +147,7 @@ def main():
         if using_cloud_redis:
             print("ℹ️  Skipping local Redis installation (using cloud Redis)")
         else:
+            print("⚠️  Cloud Redis not detected, checking for local Redis...")
             # Check if Redis is installed
             if not check_redis_installed():
                 print("❌ Redis is not installed!")
@@ -142,9 +173,13 @@ def main():
         manager.start_service("Dramatiq Worker", dramatiq_cmd, delay=2)
         
         # Start FastAPI Backend
+        # Get port from environment (Render provides this) or use default 8000
+        port = os.getenv('PORT', '8000')
+        # Use 0.0.0.0 for Render/cloud deployments, 127.0.0.1 for local
+        host = '0.0.0.0' if os.getenv('PORT') else '127.0.0.1'
         # Use --reload only if RUNTIME_ENV is development
         reload_flag = "--reload" if os.getenv('RUNTIME_ENV', 'production') == 'development' else ""
-        backend_cmd = f"{sys.executable} -m uvicorn wati.main:app --host 127.0.0.1 --port 8000 {reload_flag}".strip()
+        backend_cmd = f"{sys.executable} -m uvicorn wati.main:app --host {host} --port {port} {reload_flag}".strip()
         manager.start_service("FastAPI Backend", backend_cmd, delay=2)
         
         print()
@@ -157,8 +192,8 @@ def main():
             print("- Redis: Cloud (Upstash)")
         else:
             print("- Redis: redis://127.0.0.1:6379")
-        print("- Backend API: http://127.0.0.1:8000")
-        print("- API Docs: http://127.0.0.1:8000/docs")
+        print(f"- Backend API: http://{host}:{port}")
+        print(f"- API Docs: http://{host}:{port}/docs")
         print("- Dramatiq: Processing background tasks")
         print()
         print("Press Ctrl+C to stop all services")

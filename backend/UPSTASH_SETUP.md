@@ -30,15 +30,19 @@ Add both environment variables to your backend:
 
 **For local development (.env file):**
 ```env
+ENVIRONMENT="dev"
 UPSTASH_REDIS_REST_URL="https://fast-bluejay-19956.upstash.io"
 UPSTASH_REDIS_REST_TOKEN="your-token-here"
 ```
+**Note:** `ENVIRONMENT="dev"` will force local Redis usage. Remove it to use Upstash in development.
 
 **For production (Render/Heroku/etc.):**
 1. Go to your deployment platform dashboard
 2. Select your web service
 3. Go to "Environment" tab
-4. Add these two environment variables:
+4. Add these environment variables:
+   - **Key**: `ENVIRONMENT`
+   - **Value**: `prod` (or leave unset, defaults to prod)
    - **Key**: `UPSTASH_REDIS_REST_URL`
    - **Value**: Your Upstash REST URL
    - **Key**: `UPSTASH_REDIS_REST_TOKEN`
@@ -47,8 +51,9 @@ UPSTASH_REDIS_REST_TOKEN="your-token-here"
 
 ### 5. Deploy
 1. Your app will automatically redeploy
-2. Check logs to see "✅ Redis URL found" message
-3. Background tasks will now work with Upstash Redis
+2. Check logs to see "✅ Upstash Redis configured" message
+3. You should see: "ℹ️  Skipping local Redis installation (using cloud Redis)"
+4. Background tasks will now work with Upstash Redis
 
 ## 🔧 Features You Get
 - ✅ **Free Tier**: 10,000 requests per day

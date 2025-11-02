@@ -57,12 +57,23 @@ class ProductionServiceManager:
 
 def check_redis_connection():
     """Check if Redis is accessible via environment variable"""
-    # Check for Upstash REST credentials
+    # Check environment variable
+    environment = os.getenv("ENVIRONMENT", "prod").lower()
+    env_raw = os.getenv("ENVIRONMENT", "NOT_SET")
+    print(f"🔍 Environment: '{env_raw}' (normalized: '{environment}')")
+    
+    # In production mode, check for cloud Redis
     upstash_rest_url = os.getenv('UPSTASH_REDIS_REST_URL')
     upstash_rest_token = os.getenv('UPSTASH_REDIS_REST_TOKEN')
     
     # Check for standard Redis URL
     redis_url = os.getenv('REDIS_URL')
+    
+    # Debug: Print what we found
+    print(f"🔍 Checking for cloud Redis...")
+    print(f"   UPSTASH_REDIS_REST_URL: {'✅ Found' if upstash_rest_url else '❌ Not set'}")
+    print(f"   UPSTASH_REDIS_REST_TOKEN: {'✅ Found' if upstash_rest_token else '❌ Not set'}")
+    print(f"   REDIS_URL: {'✅ Found' if redis_url else '❌ Not set'}")
     
     if upstash_rest_url and upstash_rest_token:
         print(f"✅ Upstash Redis REST URL found: {upstash_rest_url[:30]}...")
