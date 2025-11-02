@@ -1,49 +1,30 @@
 import dramatiq
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 from dramatiq import Middleware
-from ..models import Broadcast,Integration,User  # Adjust this import as needed based on your project structure
-import json
-import logging
-from ..routes import contacts
-from dramatiq.middleware import Middleware,SkipMessage
+from dramatiq.middleware import Middleware, SkipMessage, AsyncIO
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-import httpx
-from ..models.ChatBox import Conversation
-from datetime import datetime
-from sqlalchemy.future import select
-from dramatiq.middleware import AsyncIO
-import asyncio
-from datetime import datetime, timedelta
-import pytz
-from dramatiq.middleware import Middleware
-from dramatiq.middleware import SkipMessage
-import asyncio
-import requests
-import base64
-import pandas as pd
-import pandas as pd
-import phonenumbers
-from datetime import datetime
-from fastapi import HTTPException
-from contextlib import asynccontextmanager
-from sqlalchemy.ext.asyncio import AsyncSession
-from urllib.parse import urlparse
-import asyncio
-import base64
-from datetime import datetime
-import httpx
-import pandas as pd
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-import dramatiq
+from sqlalchemy.future import select as future_select
+from ..models import Broadcast, Integration, User
+from ..models.ChatBox import Conversation
+from ..routes import contacts
+import httpx
+import requests
 import json
-
+import logging
 import os
 import time
+import ssl
+import base64
+import pandas as pd
+import phonenumbers
+import asyncio
+import pytz
+from datetime import datetime, timedelta
+from fastapi import HTTPException
+from contextlib import asynccontextmanager
+from urllib.parse import urlparse, unquote
 from dotenv import load_dotenv
 
 # Load the .env file
@@ -55,32 +36,40 @@ database_url = os.getenv("DATABASE_URL")
 # SQLAlchemy Database Configuration
 SQLALCHEMY_DATABASE_URL = database_url #'postgresql+asyncpg://postgres:Denmarks123$@localhost/wati_clone'
 
-# Only enable SQL logging in development mode
-environment = os.getenv("ENVIRONMENT", "prod").lower()
-enable_sql_logging = environment == "dev"
-
-engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=enable_sql_logging)
+# Configure database with SSL for production
+if SQLALCHEMY_DATABASE_URL:
+    # Clean the database URL for asyncpg (remove psycopg2-specific parameters)
+    cleaned_url = SQLALCHEMY_DATABASE_URL.split('?')[0]
+    
+    # Configure SSL for asyncpg using connect_args
+    connect_args = {
+        "ssl": ssl.create_default_context(),
+        "server_settings": {"jit": "off"}  # Disable JIT for better compatibility
+    }
+    
+    # Only enable SQL logging in development mode
+    environment = os.getenv("ENVIRONMENT", "prod").lower()
+    enable_sql_logging = environment == "dev"
+    
+    engine = create_async_engine(
+        cleaned_url, 
+        echo=enable_sql_logging,  # Only log SQL in dev mode
+        pool_recycle=120,
+        pool_pre_ping=True,
+        pool_size=30,
+        connect_args=connect_args
+    )
+else:
+    raise ValueError("DATABASE_URL environment variable is not set")
 
 AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-
-# @asynccontextmanager
-# async def get_db():
-#     async with AsyncSessionLocal() as session:
-#         try:
-#             yield session
-#         finally:
-#             await session.close()
 
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
 # Base class for declarative models
 Base = declarative_base()
-
-import asyncio
-from dramatiq.middleware import Middleware, SkipMessage
-from sqlalchemy.ext.asyncio import AsyncSession
-
 
 # Function to get task status
 async def get_task_status(task_id: int, db: AsyncSession):
@@ -149,32 +138,11 @@ async def get_task_status(task_id: int, db: AsyncSession):
 #         async for db in self.db_session_factory():# Use async with instead of async for
 #             return await get_task_status(task_id, db)
 
-        
-
-
-    @staticmethod
-    def _get_or_create_event_loop():
-        """
-        Get the current event loop, or create a new one if none exists in the current thread.
-        
-        Returns:
-            asyncio.AbstractEventLoop: The event loop for the current thread.
-        """
-        try:
-            return asyncio.get_event_loop()
-        except RuntimeError:  # No event loop in this thread
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop
-
 
 # cancelation_middleware = CancelationMiddleware(get_db)
 
 # Add the middleware to your Dramatiq broker
 from dramatiq.brokers.redis import RedisBroker
-import os
-from urllib.parse import urlparse, unquote
-import ssl
 import redis as redis_lib
 
 def get_redis_url():
