@@ -56,7 +56,8 @@ if SQLALCHEMY_DATABASE_URL:
         echo=enable_sql_logging,  # Only log SQL in dev mode
         pool_recycle=120,
         pool_pre_ping=True,
-        pool_size=30,
+        pool_size=5,  # Reduced from 30 to 5 for Render's 512MB memory limit
+        max_overflow=10,  # Allow some overflow connections
         connect_args=connect_args
     )
 else:
