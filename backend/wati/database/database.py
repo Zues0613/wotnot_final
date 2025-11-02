@@ -45,9 +45,13 @@ if SQLALCHEMY_DATABASE_URL:
         "server_settings": {"jit": "off"}  # Disable JIT for better compatibility
     }
     
+    # Only enable SQL logging in development mode
+    environment = os.getenv("ENVIRONMENT", "prod").lower()
+    enable_sql_logging = environment == "dev"
+    
     engine = create_async_engine(
         cleaned_url, 
-        echo=True,
+        echo=enable_sql_logging,  # Only log SQL in dev mode
         pool_recycle=120,
         pool_pre_ping=True,
         pool_size=30,

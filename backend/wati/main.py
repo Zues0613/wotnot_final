@@ -70,11 +70,12 @@ async def startup_event():
         print("  (AI features will be disabled, but app will continue)")
     
     # Start scheduler for closing expired chats
+    # Changed to run every 10 minutes instead of 1 minute to reduce DB/Redis requests
     if not scheduler_started:
-        scheduler.add_job(close_expired_chats, 'interval', minutes=1)
+        scheduler.add_job(close_expired_chats, 'interval', minutes=10)
         scheduler.start()
         scheduler_started = True
-        print("✓ Scheduler started")
+        print("✓ Scheduler started (runs every 10 minutes)")
 
 @app.on_event("shutdown")
 async def shutdown_event():

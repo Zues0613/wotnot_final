@@ -1,8 +1,9 @@
-from fastapi import APIRouter,Depends,HTTPException, File, UploadFile,Request
+from fastapi import APIRouter,Depends,HTTPException, File, UploadFile,Request, WebSocket, WebSocketDisconnect
 from fastapi import FastAPI
 from ..models import Broadcast,Contacts,ChatBox
 from ..models.ChatBox import Last_Conversation
 from ..models.ChatBox import Conversation
+from ..models.User import User
 from ..Schemas import broadcast,user,chatbox
 from ..database import database
 from sqlalchemy.orm import Session
@@ -300,6 +301,35 @@ async def handle_incoming_messages(value:dict, db: AsyncSession):
         )
         db.add(conversation)
         await db.commit()
+        
+        # Push update via WebSocket to connected clients (no polling needed!)
+        from ..services.websocket_manager import manager
+        
+        # Notify users watching active conversations for this receiver
+        # Find user_id from phone_number_id (receiver_wa_id)
+        user_result = await db.execute(
+            select(User).filter(User.Phone_id == int(phone_number_id))
+        )
+        receiver_user = user_result.scalars().first()
+        if receiver_user:
+            # Get updated active conversations for this user
+            active_result = await db.execute(
+                select(ChatBox.Last_Conversation)
+                .filter(cast(ChatBox.Last_Conversation.receiver_wa_id, String) == str(phone_number_id))
+                .order_by(desc(ChatBox.Last_Conversation.last_chat_time))
+            )
+            active_chats = [convert_to_dict(chat) for chat in active_result.scalars().all()]
+            await manager.broadcast_active_conversations_update(
+                receiver_user.id,
+                {"type": "update", "data": active_chats}
+            )
+        
+        # Notify users watching this specific conversation
+        conversation_dict = convert_to_dict(conversation)
+        await manager.broadcast_conversation_update(
+            wa_id,
+            {"type": "new_message", "data": conversation_dict}
+        )
 
 
 from fastapi import APIRouter, Depends, Request, BackgroundTasks
@@ -311,53 +341,85 @@ import json
 from typing import AsyncGenerator
 
 
-@router.get("/sse/conversations/{contact_number}")
-async def event_stream(
+@router.websocket("/ws/conversations/{contact_number}")
+async def websocket_conversation(
+    websocket: WebSocket,
     contact_number: str,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    token: str = Query(...),
-    db: AsyncSession = Depends(database.get_db), # Use AsyncSession for async DB operations
-) -> StreamingResponse:
-    """
-    Stream whatsapp conversations for a specific contact number.
-    """
-
-    current_user = await get_current_user(token, db)
-    if current_user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
-
-    async def get_conversations() -> AsyncGenerator[str, None]:
-        last_data = None  # Track last conversation data
-
-        # Send an empty initial response to avoid frontend timeouts
-
-        while True:
-            async with db.begin():  # Use async context manager to handle the session
-                # Fetch conversations for the given contact number
-                result = await db.execute(
-                    select(ChatBox.Conversation)
-                    .filter(ChatBox.Conversation.wa_id == contact_number).filter(ChatBox.Conversation.phone_number_id==current_user.Phone_id)
-                    .order_by(ChatBox.Conversation.timestamp)
-                )
-                conversations = result.scalars().all()  # Get the list of conversation instances
-
-            # Convert conversation instances to dictionaries
+):
+    '''
+    WebSocket endpoint for real-time conversation messages.
+    No polling - updates are pushed when new messages arrive.
+    Query param: ?token=YOUR_TOKEN
+    '''
+    try:
+        # Extract token from query parameters
+        token = websocket.query_params.get("token")
+        if not token:
+            await websocket.close(code=1008, reason="Token required")
+            return
+        
+        # Get database session
+        async for db in database.get_db():
+            # Authenticate user
+            current_user = await get_current_user(token, db)
+            if current_user is None:
+                await websocket.close(code=1008, reason="Invalid or expired token")
+                return
+            
+            # Connect to WebSocket manager
+            await manager.connect_conversation(websocket, current_user.id, contact_number)
+            
+            # Send initial conversation data
+            result = await db.execute(
+                select(ChatBox.Conversation)
+                .filter(ChatBox.Conversation.wa_id == contact_number)
+                .filter(ChatBox.Conversation.phone_number_id == current_user.Phone_id)
+                .order_by(ChatBox.Conversation.timestamp)
+            )
+            conversations = result.scalars().all()
             conversation_data = [convert_to_dict(conversation) for conversation in conversations]
-
-            # Send data only if it has changed
-            if conversation_data != last_data:
-                yield f"data: {json.dumps(conversation_data)}\n\n"
-                last_data = conversation_data  # Update the last known data
-
-            # Check if the client is disconnected
-            if await request.is_disconnected():
+            await websocket.send_json({"type": "initial", "data": conversation_data})
+            break  # Exit after first iteration
+        
+        # Keep connection persistent - listen for messages (two-way communication)
+        # No timeout - connection stays alive until client disconnects
+        while True:
+            try:
+                # Wait for incoming messages from client (two-way communication)
+                # Client can send: ping, or any other JSON data for real-time interaction
+                message = await websocket.receive_text()
+                
+                # Handle ping/pong for keepalive
+                if message == "ping":
+                    await websocket.send_text("pong")
+                elif message.startswith("{"):
+                    # Handle JSON messages from client (two-way communication)
+                    try:
+                        client_data = json.loads(message)
+                        # Echo back or process client message
+                        await websocket.send_json({
+                            "type": "ack",
+                            "message": "Received your message",
+                            "client_data": client_data
+                        })
+                    except json.JSONDecodeError:
+                        await websocket.send_json({"type": "error", "message": "Invalid JSON"})
+                        
+            except WebSocketDisconnect:
+                print(f"Client disconnected from conversation {contact_number} (user_id: {current_user.id})")
+                await manager.disconnect_conversation(current_user.id, contact_number)
                 break
-
-            # Wait for a second before checking again
-            await asyncio.sleep(2)
-
-    return StreamingResponse(get_conversations(), media_type="text/event-stream")
+            except Exception as e:
+                print(f"WebSocket error for conversation {contact_number} (user_id: {current_user.id}): {e}")
+                await manager.disconnect_conversation(current_user.id, contact_number)
+                break
+                
+    except Exception as e:
+        print(f"WebSocket connection error: {e}")
+        try:
+            await websocket.close()
+        except:
+            pass
 
 
 
@@ -423,44 +485,84 @@ def convert_to_dict(instance):
 
 
 
+from ..services.websocket_manager import manager
 
-@router.get("/active-conversations")
-async def get_active_conversations(
-    request: Request,  # <-- Add request param here
-    token: str = Query(...),
-    db: AsyncSession = Depends(database.get_db),
-) -> StreamingResponse:
+@router.websocket("/ws/active-conversations")
+async def websocket_active_conversations(
+    websocket: WebSocket,
+):
     '''
-    Stream active conversations for the current user.
+    WebSocket endpoint for real-time active conversations updates.
+    No polling - updates are pushed when conversations change.
+    Query param: ?token=YOUR_TOKEN
     '''
-    current_user = await get_current_user(token, db)
-    if current_user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
-
-    async def get_active_chats() -> AsyncGenerator[str, None]:
-        last_active_chats = None
+    try:
+        # Extract token from query parameters
+        token = websocket.query_params.get("token")
+        if not token:
+            await websocket.close(code=1008, reason="Token required")
+            return
         
-        while True:
-            # Check if client disconnected
-            if await request.is_disconnected():
-                print("Client disconnected, stopping SSE stream")
-                break  # Exit the loop to close the connection
+        # Get database session
+        async for db in database.get_db():
+            # Authenticate user
+            current_user = await get_current_user(token, db)
+            if current_user is None:
+                await websocket.close(code=1008, reason="Invalid or expired token")
+                return
             
+            # Connect to WebSocket manager
+            await manager.connect_active_conversations(websocket, current_user.id, db)
+            
+            # Send initial data
             result = await db.execute(
                 select(ChatBox.Last_Conversation)
                 .filter(cast(ChatBox.Last_Conversation.receiver_wa_id, String) == str(current_user.Phone_id))
                 .order_by(desc(ChatBox.Last_Conversation.last_chat_time))
             )
-            
             active_chat_data = [convert_to_dict(chat) for chat in result.scalars().all()]
-
-            if active_chat_data != last_active_chats:
-                last_active_chats = active_chat_data
-                yield f"data: {json.dumps(active_chat_data)}\n\n"
-
-            await asyncio.sleep(1)
-
-    return StreamingResponse(get_active_chats(), media_type="text/event-stream")
+            await websocket.send_json({"type": "initial", "data": active_chat_data})
+            break  # Exit after first iteration
+        
+        # Keep connection persistent - listen for messages (two-way communication)
+        # No timeout - connection stays alive until client disconnects
+        while True:
+            try:
+                # Wait for incoming messages from client (two-way communication)
+                # Client can send: ping, or any other JSON data for real-time interaction
+                message = await websocket.receive_text()
+                
+                # Handle ping/pong for keepalive
+                if message == "ping":
+                    await websocket.send_text("pong")
+                elif message.startswith("{"):
+                    # Handle JSON messages from client (two-way communication)
+                    try:
+                        client_data = json.loads(message)
+                        # Echo back or process client message
+                        await websocket.send_json({
+                            "type": "ack",
+                            "message": "Received your message",
+                            "client_data": client_data
+                        })
+                    except json.JSONDecodeError:
+                        await websocket.send_json({"type": "error", "message": "Invalid JSON"})
+                        
+            except WebSocketDisconnect:
+                print(f"Client disconnected (user_id: {current_user.id})")
+                await manager.disconnect_active_conversations(current_user.id)
+                break
+            except Exception as e:
+                print(f"WebSocket error for user {current_user.id}: {e}")
+                await manager.disconnect_active_conversations(current_user.id)
+                break
+                
+    except Exception as e:
+        print(f"WebSocket connection error: {e}")
+        try:
+            await websocket.close()
+        except:
+            pass
 
 
 
@@ -531,6 +633,14 @@ async def send_message(
         db.add(conversation)
         await db.commit()  # Commit changes asynchronously
         await db.refresh(conversation)  # Refresh asynchronously
+        
+        # Push update via WebSocket to connected clients (no polling needed!)
+        from ..services.websocket_manager import manager
+        conversation_dict = convert_to_dict(conversation)
+        await manager.broadcast_conversation_update(
+            payload.wa_id,
+            {"type": "new_message", "data": conversation_dict}
+        )
 
         return {"status": "Message sent", "response": response_data}
 
@@ -595,6 +705,14 @@ async def send_message(
         db.add(conversation)
         await db.commit()  # Commit changes asynchronously
         await db.refresh(conversation)  # Refresh asynchronously
+        
+        # Push update via WebSocket to connected clients (no polling needed!)
+        from ..services.websocket_manager import manager
+        conversation_dict = convert_to_dict(conversation)
+        await manager.broadcast_conversation_update(
+            payload.wa_id,
+            {"type": "new_message", "data": conversation_dict}
+        )
 
         return {"status": "Message sent", "response": response_data}
 

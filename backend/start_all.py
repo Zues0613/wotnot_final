@@ -73,6 +73,23 @@ def check_redis_running():
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
+def check_cloud_redis():
+    """Check if cloud Redis (Upstash) is configured"""
+    upstash_rest_url = os.getenv('UPSTASH_REDIS_REST_URL')
+    upstash_rest_token = os.getenv('UPSTASH_REDIS_REST_TOKEN')
+    redis_url = os.getenv('REDIS_URL')
+    
+    if upstash_rest_url and upstash_rest_token:
+        print(f"✅ Upstash Redis configured: {upstash_rest_url[:30]}...")
+        print("🔗 Using cloud Redis (no local installation needed)")
+        return True
+    elif redis_url and not redis_url.startswith('redis://localhost') and not redis_url.startswith('redis://127.0.0.1'):
+        print(f"✅ Cloud Redis URL configured")
+        print("🔗 Using cloud Redis (no local installation needed)")
+        return True
+    
+    return False
+
 def main():
     """Main startup function"""
     print("=" * 60)
@@ -91,31 +108,43 @@ def main():
     signal.signal(signal.SIGINT, manager.signal_handler)
     signal.signal(signal.SIGTERM, manager.signal_handler)
     
+    # Check if cloud Redis (Upstash) is configured
+    using_cloud_redis = False
+    
     try:
-        # Check if Redis is installed
-        if not check_redis_installed():
-            print("❌ Redis is not installed!")
-            print("\n📋 Installation Instructions:")
-            print("- Windows: Download from https://github.com/microsoftarchive/redis/releases")
-            print("- macOS: brew install redis")
-            print("- Linux: sudo apt-get install redis-server")
-            print("- Docker: docker run -d -p 6379:6379 redis:alpine")
-            sys.exit(1)
-        
-        # Check if Redis is already running
-        if check_redis_running():
-            print("✅ Redis is already running")
+        # Check if cloud Redis (Upstash) is configured - skip local Redis if so
+        using_cloud_redis = check_cloud_redis()
+        if using_cloud_redis:
+            print("ℹ️  Skipping local Redis installation (using cloud Redis)")
         else:
-            # Start Redis
-            manager.start_service("Redis", "redis-server")
-            time.sleep(3)  # Wait for Redis to start
+            # Check if Redis is installed
+            if not check_redis_installed():
+                print("❌ Redis is not installed!")
+                print("\n📋 Installation Instructions:")
+                print("- Windows: Download from https://github.com/microsoftarchive/redis/releases")
+                print("- macOS: brew install redis")
+                print("- Linux: sudo apt-get install redis-server")
+                print("- Docker: docker run -d -p 6379:6379 redis:alpine")
+                print("\n💡 Or use cloud Redis (Upstash):")
+                print("   Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN environment variables")
+                sys.exit(1)
+            
+            # Check if Redis is already running
+            if check_redis_running():
+                print("✅ Redis is already running")
+            else:
+                # Start Redis
+                manager.start_service("Redis", "redis-server")
+                time.sleep(3)  # Wait for Redis to start
         
         # Start Dramatiq Worker
         dramatiq_cmd = f"{sys.executable} -m dramatiq wati.services.tasks"
         manager.start_service("Dramatiq Worker", dramatiq_cmd, delay=2)
         
         # Start FastAPI Backend
-        backend_cmd = f"{sys.executable} -m uvicorn wati.main:app --host 127.0.0.1 --port 8000 --reload"
+        # Use --reload only if RUNTIME_ENV is development
+        reload_flag = "--reload" if os.getenv('RUNTIME_ENV', 'production') == 'development' else ""
+        backend_cmd = f"{sys.executable} -m uvicorn wati.main:app --host 127.0.0.1 --port 8000 {reload_flag}".strip()
         manager.start_service("FastAPI Backend", backend_cmd, delay=2)
         
         print()
@@ -124,7 +153,10 @@ def main():
         print("=" * 60)
         print()
         print("🌐 Services running:")
-        print("- Redis: redis://127.0.0.1:6379")
+        if using_cloud_redis:
+            print("- Redis: Cloud (Upstash)")
+        else:
+            print("- Redis: redis://127.0.0.1:6379")
         print("- Backend API: http://127.0.0.1:8000")
         print("- API Docs: http://127.0.0.1:8000/docs")
         print("- Dramatiq: Processing background tasks")

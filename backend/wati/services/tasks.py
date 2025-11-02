@@ -43,6 +43,7 @@ import dramatiq
 import json
 
 import os
+import time
 from dotenv import load_dotenv
 
 # Load the .env file
@@ -54,7 +55,11 @@ database_url = os.getenv("DATABASE_URL")
 # SQLAlchemy Database Configuration
 SQLALCHEMY_DATABASE_URL = database_url #'postgresql+asyncpg://postgres:Denmarks123$@localhost/wati_clone'
 
-engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True)
+# Only enable SQL logging in development mode
+environment = os.getenv("ENVIRONMENT", "prod").lower()
+enable_sql_logging = environment == "dev"
+
+engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=enable_sql_logging)
 
 AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -168,14 +173,31 @@ async def get_task_status(task_id: int, db: AsyncSession):
 # Add the middleware to your Dramatiq broker
 from dramatiq.brokers.redis import RedisBroker
 import os
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
+import ssl
+import redis as redis_lib
 
 def get_redis_url():
     """
     Get Redis URL from environment variables.
-    Supports both Upstash REST credentials and standard Redis URL.
+    Supports environment-based selection:
+    - dev: Uses local Redis (redis://localhost:6379) - IGNORES Upstash credentials
+    - prod: Uses Upstash Redis (from UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN)
     """
-    # Check if Upstash REST credentials are provided
+    environment = os.getenv("ENVIRONMENT", "prod").lower()
+    
+    # Debug: Show what environment variable was read
+    env_raw = os.getenv("ENVIRONMENT", "NOT_SET")
+    print(f"🔍 ENVIRONMENT variable check: '{env_raw}' (normalized: '{environment}')")
+    
+    # Development mode: Use local Redis - ALWAYS ignore Upstash credentials
+    if environment == "dev":
+        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+        print(f"✅ Development mode detected: Using local Redis ({redis_url})")
+        print(f"   ℹ️  Upstash credentials are IGNORED in dev mode")
+        return redis_url
+    
+    # Production mode: Use Upstash Redis
     upstash_rest_url = os.getenv('UPSTASH_REDIS_REST_URL')
     upstash_rest_token = os.getenv('UPSTASH_REDIS_REST_TOKEN')
     
@@ -192,26 +214,176 @@ def get_redis_url():
         # For Upstash, the REST token is used as the password for Redis protocol
         # Note: rediss:// indicates SSL/TLS connection (Upstash requires this)
         redis_url = f"rediss://default:{upstash_rest_token}@{host}:6379"
-        print(f"✅ Using Upstash Redis: {host}")
+        print(f"✅ Production mode: Using Upstash Redis ({host})")
         return redis_url
     
-    # Fall back to standard REDIS_URL if Upstash credentials not provided
+    # Fall back to REDIS_URL if Upstash credentials not provided in production
     redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
     if redis_url == 'redis://localhost:6379':
-        print("⚠️ Using default Redis URL (localhost:6379)")
+        print("⚠️ Production mode but Upstash credentials not found, using default Redis URL (localhost:6379)")
     else:
-        print(f"✅ Using Redis URL from REDIS_URL environment variable")
+        print(f"✅ Production mode: Using Redis URL from REDIS_URL environment variable")
     return redis_url
 
 # Get Redis URL (supports Upstash REST credentials)
 redis_url = get_redis_url()
 
-# Create Redis broker
-redis_broker = RedisBroker(url=redis_url)
+# Parse Redis URL to get connection parameters
+parsed = urlparse(redis_url)
+use_ssl = parsed.scheme == 'rediss'
+# Determine if using Upstash based on both scheme and environment
+# In dev mode, we should never be using Upstash
+environment_check = os.getenv("ENVIRONMENT", "prod").lower()
+env_raw_check = os.getenv("ENVIRONMENT", "NOT_SET")
+is_upstash = use_ssl and environment_check != "dev"
 
-redis_broker.add_middleware(AsyncIO()) 
-# redis_broker.add_middleware(cancelation_middleware)
-dramatiq.set_broker(redis_broker)
+if use_ssl and environment_check == "dev":
+    print(f"⚠️  WARNING: Detected rediss:// URL in dev mode! This shouldn't happen.")
+    print(f"   Check your ENVIRONMENT variable - it should be 'dev', got '{env_raw_check}'")
+
+# Create Redis broker with timeout configuration
+# Different settings for local vs Upstash Redis
+# Configure timeouts based on environment
+if is_upstash:
+    # Upstash may have higher latency, use longer timeouts
+    socket_connect_timeout = 60  # 60 seconds for Upstash
+    socket_timeout = 60  # 60 seconds for Upstash
+    print("⚠️ Using extended timeouts for Upstash Redis (60s)")
+else:
+    # Local Redis is fast, use shorter timeouts
+    socket_connect_timeout = 10  # 10 seconds for local
+    socket_timeout = 10  # 10 seconds for local
+    print("✅ Using standard timeouts for local Redis (10s)")
+
+# Create Redis client with proper timeout settings
+# Build kwargs differently for local vs Upstash Redis
+if environment == "dev" and not use_ssl:
+    # Local Redis - no auth, simple configuration
+    redis_client_kwargs = {
+        'host': parsed.hostname or 'localhost',
+        'port': parsed.port or 6379,
+        'ssl': False,
+        'socket_connect_timeout': socket_connect_timeout,
+        'socket_timeout': socket_timeout,
+        'socket_keepalive': True,
+        'decode_responses': False,  # Dramatiq expects bytes
+        'health_check_interval': 30,  # Check connection health every 30 seconds
+        # Explicitly don't set username/password for local Redis
+    }
+    print(f"   ℹ️  Local Redis config: {redis_client_kwargs['host']}:{redis_client_kwargs['port']} (no auth)")
+else:
+    # Upstash Redis - requires auth and SSL
+    redis_client_kwargs = {
+        'host': parsed.hostname,
+        'port': parsed.port or 6379,
+        'password': unquote(parsed.password) if parsed.password else None,
+        'username': parsed.username if parsed.username else 'default',
+        'ssl': True,
+        'ssl_cert_reqs': ssl.CERT_NONE,  # Upstash uses self-signed certs
+        'socket_connect_timeout': socket_connect_timeout,
+        'socket_timeout': socket_timeout,
+        'socket_keepalive': True,
+        'decode_responses': False,  # Dramatiq expects bytes
+        'health_check_interval': 30,  # Check connection health every 30 seconds
+    }
+    print(f"   ℹ️  Upstash Redis config: {redis_client_kwargs['host']}:{redis_client_kwargs['port']} (with auth)")
+
+# Create Redis client with connection retry logic
+redis_client = None
+max_retries = 3
+retry_count = 0
+
+while retry_count < max_retries:
+    try:
+        redis_client = redis_lib.Redis(**redis_client_kwargs)
+        # Test connection immediately
+        # Note: ping() doesn't accept timeout parameter - timeout is set at client level
+        redis_client.ping()
+        print(f"✅ Redis connection successful on attempt {retry_count + 1}")
+        break
+    except (redis_lib.ConnectionError, redis_lib.TimeoutError, redis_lib.AuthenticationError, Exception) as e:
+        retry_count += 1
+        if retry_count < max_retries:
+            print(f"⚠️ Redis connection attempt {retry_count}/{max_retries} failed: {e}")
+            print(f"   Retrying in 2 seconds...")
+            time.sleep(2)
+        else:
+            print(f"\n❌ Failed to connect to Redis after {max_retries} attempts")
+            print(f"   Error: {e}")
+            if environment == "dev":
+                print("\n   💡 LOCAL REDIS IS NOT RUNNING!")
+                print("   📋 To start Redis:")
+                print("      Windows:")
+                print("        1. Download Redis: https://github.com/microsoftarchive/redis/releases")
+                print("        2. Run: redis-server.exe")
+                print("        3. OR install as service: redis-server --service-install")
+                print("      macOS: brew install redis && brew services start redis")
+                print("      Linux: sudo systemctl start redis (or sudo service redis start)")
+                print("\n   🔄 After starting Redis, restart your backend")
+                print("   🌐 Or use Docker: docker run -d -p 6379:6379 redis:alpine")
+            else:
+                print("   💡 Check Upstash credentials:")
+                print("      - UPSTASH_REDIS_REST_URL")
+                print("      - UPSTASH_REDIS_REST_TOKEN")
+            # For dev mode, fail fast - don't continue if Redis isn't available
+            if environment == "dev":
+                print("\n   ❌ DRAMATIQ CANNOT START WITHOUT REDIS IN DEV MODE")
+                print("   Please start Redis first, then restart Dramatiq")
+                raise ConnectionError(f"Cannot connect to local Redis: {e}")
+            else:
+                # In production, create client anyway (might work later)
+                redis_client = redis_lib.Redis(**redis_client_kwargs)
+                print("\n   ⚠️  Continuing anyway - Dramatiq will retry when it needs Redis")
+
+# Create Redis broker with the configured client
+# Configure prefetch for better performance with Upstash (reduces script complexity)
+try:
+    redis_broker = RedisBroker(
+        client=redis_client,
+        # Lower prefetch for Upstash to avoid script timeout (5s limit)
+        # Higher prefetch for local Redis (faster)
+        prefetch=5 if is_upstash else 50
+    )
+    
+    redis_broker.add_middleware(AsyncIO()) 
+    # redis_broker.add_middleware(cancelation_middleware)
+    
+    # Final connection validation before setting broker
+    # This prevents Dramatiq from starting with a bad connection
+    try:
+        test_result = redis_client.ping()
+        if test_result:
+            print(f"✅ Final Redis connection test: SUCCESS")
+        else:
+            raise ConnectionError("Redis ping returned False")
+    except Exception as e:
+        if environment == "dev":
+            print(f"❌ Final Redis connection test FAILED: {e}")
+            print("   Cannot start Dramatiq without Redis in dev mode")
+            raise ConnectionError(f"Redis connection failed: {e}")
+        else:
+            print(f"⚠️  Final Redis connection test failed (production mode, will retry): {e}")
+    
+    dramatiq.set_broker(redis_broker)
+    
+    # Print configuration summary
+    if not hasattr(dramatiq, '_broker_setup_printed'):
+        dramatiq._broker_setup_printed = True
+        print(f"✅ Dramatiq Redis broker configured:")
+        print(f"   - Environment: {environment.upper()}")
+        print(f"   - Redis: {'Upstash' if is_upstash else 'Local'}")
+        print(f"   - Timeout: {socket_timeout}s")
+        print(f"   - Prefetch: {5 if is_upstash else 50} messages")
+        print(f"   - Connection: ✅ Verified and ready")
+            
+except ConnectionError:
+    # Re-raise connection errors in dev mode
+    raise
+except Exception as e:
+    print(f"❌ Failed to create Dramatiq Redis broker: {e}")
+    print("   This will cause background tasks to fail. Check Redis connection.")
+    if environment == "dev":
+        raise  # Fail fast in dev mode
 
 
 

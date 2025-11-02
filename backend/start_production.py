@@ -121,6 +121,7 @@ def main():
         manager.start_service("Dramatiq Worker", dramatiq_cmd, delay=2)
         
         # Start FastAPI Backend (main process)
+        # Production: No --reload flag (reduces unnecessary file watching and Redis requests)
         backend_cmd = f"{sys.executable} -m uvicorn wati.main:app --host {host} --port {port}"
         manager.start_service("FastAPI Backend", backend_cmd, delay=2)
         
